@@ -255,7 +255,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto w-full font-sans">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full font-sans">
       {/* Profile hero */}
       <div className="bg-white border border-slate-200 rounded-3xl p-8 mb-6 relative overflow-hidden shadow-sm">
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-br from-indigo-50 to-emerald-50" />

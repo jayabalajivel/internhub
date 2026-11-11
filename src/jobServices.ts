@@ -42,9 +42,55 @@ export interface LiveJob {
   matchPercentage?: number
 }
 
-// In-Memory Fast Cache (TTL 5 Minutes)
+// In-Memory & Session Storage Multi-Layer Fast Cache (TTL 5 Minutes)
 const queryCache = new Map<string, { timestamp: number; data: LiveJob[] }>()
 const CACHE_TTL_MS = 5 * 60 * 1000
+
+export function getFromCache(key: string): LiveJob[] | null {
+  const now = Date.now()
+  const mem = queryCache.get(key)
+  if (mem && now - mem.timestamp < CACHE_TTL_MS) {
+    return mem.data
+  }
+  try {
+    const s = sessionStorage.getItem(`internhub_jobcache_${key}`)
+    if (s) {
+      const parsed = JSON.parse(s)
+      if (parsed && now - parsed.timestamp < CACHE_TTL_MS) {
+        queryCache.set(key, parsed)
+        return parsed.data
+      }
+    }
+  } catch {}
+  return null
+}
+
+export function saveToCache(key: string, data: LiveJob[]) {
+  const item = { timestamp: Date.now(), data }
+  queryCache.set(key, item)
+  try {
+    sessionStorage.setItem(`internhub_jobcache_${key}`, JSON.stringify(item))
+  } catch {}
+}
+
+// Resilient Fast Fetch with Timeout (Default 2200ms)
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = 2200,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+    return res
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
 
 // Helper: Strip HTML tags cleanly from descriptions
 function cleanHtml(rawHtml: string): string {
@@ -162,18 +208,19 @@ async function fetchJobDataAPI(
       location ? `&location=${encodeURIComponent(location)}` : ""
     }`
 
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       headers: {
         Authorization: `Api-Key ${JOB_API_KEYS.JOBDATA_KEY}`,
       },
-    })
+    }, 2000)
 
     if (!res.ok) {
-      const directRes = await fetch(
+      const directRes = await fetchWithTimeout(
         `https://jobdataapi.com/api/jobs/?title=${encodeURIComponent(searchTitle)}`,
         {
           headers: { Authorization: `Api-Key ${JOB_API_KEYS.JOBDATA_KEY}` },
         },
+        2000,
       )
       if (!directRes.ok) return []
       const directData = await directRes.json()
@@ -255,18 +302,18 @@ async function fetchJoobleAPI(
       location: location || "India",
     }
 
-    let res = await fetch(url, {
+    let res = await fetchWithTimeout(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    })
+    }, 2000)
 
     if (!res.ok) {
-      res = await fetch(`https://jooble.org/api/${JOB_API_KEYS.JOOBLE_KEY}`, {
+      res = await fetchWithTimeout(`https://jooble.org/api/${JOB_API_KEYS.JOOBLE_KEY}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-      })
+      }, 2000)
     }
 
     if (!res.ok) return []
@@ -333,7 +380,7 @@ async function fetchAdzunaAPI(
         : "in"
     const url = `${baseUrl}/v1/api/jobs/${country}/search/1?app_id=${JOB_API_KEYS.ADZUNA_APP_ID}&app_key=${JOB_API_KEYS.ADZUNA_KEY}&what=${encodeURIComponent(searchTitle)}`
 
-    const res = await fetch(url)
+    const res = await fetchWithTimeout(url, {}, 2000)
     if (!res.ok) return []
 
     const data = await res.json()
@@ -388,8 +435,10 @@ async function fetchAdzunaAPI(
 async function fetchRemotiveAPI(query: string): Promise<LiveJob[]> {
   try {
     const q = query ? encodeURIComponent(query) : "software"
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://remotive.com/api/remote-jobs?search=${q}&limit=25`,
+      {},
+      2000,
     )
     if (!res.ok) return []
     const data = await res.json()
@@ -439,7 +488,11 @@ async function fetchRemotiveAPI(query: string): Promise<LiveJob[]> {
 // 5. Fetch from Arbeitnow Public API (Free, Live Open API)
 async function fetchArbeitnowAPI(query: string): Promise<LiveJob[]> {
   try {
-    const res = await fetch("https://www.arbeitnow.com/api/job-board-api")
+    const res = await fetchWithTimeout(
+      "https://www.arbeitnow.com/api/job-board-api",
+      {},
+      2000,
+    )
     if (!res.ok) return []
     const data = await res.json()
     const rawJobs = data.data || []
@@ -511,10 +564,10 @@ export async function getAggregatedLiveJobs(
   const cacheKey = `${searchQuery.toLowerCase()}_${combinedLoc.toLowerCase()}_${workMode.toLowerCase()}_${country.toLowerCase()}`
   const now = Date.now()
 
-  // Return cached result if fresh (< 3 mins)
-  const cached = queryCache.get(cacheKey)
-  if (cached && now - cached.timestamp < 3 * 60 * 1000) {
-    return cached.data
+  // Return cached result if fresh (< 5 mins)
+  const cachedData = getFromCache(cacheKey)
+  if (cachedData && cachedData.length > 0) {
+    return cachedData
   }
 
   // Execute parallel requests to live APIs ONLY: JobDataAPI, Jooble API, Adzuna API, Remotive API, Arbeitnow API
@@ -696,9 +749,9 @@ export async function getAggregatedLiveJobs(
     })
   }
 
-  // Save to cache
+  // Save to multi-layer fast cache
   if (deduplicated.length > 0) {
-    queryCache.set(cacheKey, { timestamp: now, data: deduplicated })
+    saveToCache(cacheKey, deduplicated)
   }
 
   return deduplicated
@@ -726,7 +779,11 @@ export async function verifyJobActiveOnSource(job: LiveJob): Promise<boolean> {
     }
 
     if (job.source.includes("Arbeitnow")) {
-      const res = await fetch("https://www.arbeitnow.com/api/job-board-api")
+      const res = await fetchWithTimeout(
+      "https://www.arbeitnow.com/api/job-board-api",
+      {},
+      2000,
+    )
       if (res.ok) {
         const data = await res.json()
         const activeJobs = data.data || []

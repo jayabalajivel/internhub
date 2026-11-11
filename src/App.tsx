@@ -11,6 +11,15 @@ import Notifications from "./pages/Notifications"
 import Saved from "./pages/Saved"
 import Sidebar from "./components/Sidebar"
 import { supabase, isSupabaseConfigured } from "./lib/supabase"
+import logo from "./assets/logo.png"
+import {
+  HomeIcon,
+  BriefcaseIcon,
+  FileTextIcon,
+  ZapIcon,
+  UserIcon,
+  BellIcon,
+} from "./components/Icons"
 
 type Page = "landing" | "auth" | "dashboard" | "internships" | "resume" | "skills" | "tracker" | "saved" | "notifications" | "profile" | "settings"
 
@@ -105,7 +114,12 @@ export default function App() {
     }
   }, [])
 
-  const navigate = (p: string) => setPage(p as Page)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const navigate = (p: string) => {
+    setMobileMenuOpen(false)
+    setPage(p as Page)
+  }
 
   const isApp = APP_PAGES.includes(page)
 
@@ -115,20 +129,128 @@ export default function App() {
     return <Landing onNavigate={navigate} />
   }
 
+  const pageTitles: Record<string, string> = {
+    dashboard: "Overview",
+    internships: "Find Jobs & Internships",
+    resume: "Resume Builder",
+    skills: "Skill Gap & Roadmap",
+    tracker: "Application Tracker",
+    saved: "Saved Jobs",
+    notifications: "Alerts",
+    profile: "Candidate Profile",
+    settings: "Settings",
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">
-      <Sidebar page={page} onNavigate={navigate} />
-      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
-        {page === "dashboard" && <Dashboard onNavigate={navigate} />}
-        {page === "internships" && <Internships onNavigate={navigate} />}
-        {page === "resume" && <ResumeUpload onNavigate={navigate} />}
-        {page === "skills" && <SkillGap onNavigate={navigate} />}
-        {(page === "tracker" || (page as string) === "applications") && <ApplicationTracker onNavigate={navigate} />}
-        {page === "saved" && <Saved onNavigate={navigate} />}
-        {page === "notifications" && <Notifications onNavigate={navigate} />}
-        {page === "profile" && <Profile />}
-        {page === "settings" && <SettingsPage onNavigate={navigate} />}
-      </main>
+      <Sidebar
+        page={page}
+        onNavigate={navigate}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
+      />
+
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Mobile Top Header (Visible on screens < 1024px) */}
+        <header className="lg:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-xs">
+          <div
+            className="flex items-center gap-2.5 cursor-pointer"
+            onClick={() => navigate("dashboard")}
+          >
+            <img
+              src={logo}
+              alt="InternHub Logo"
+              className="w-8 h-8 object-contain shrink-0"
+            />
+            <div className="leading-tight">
+              <span className="font-bold text-base tracking-tight text-slate-900 block">
+                InternHub
+              </span>
+              <span className="text-[10px] font-semibold text-indigo-600 block">
+                {pageTitles[page] || "Platform"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => navigate("notifications")}
+              className="p-2 rounded-xl text-slate-600 hover:text-indigo-600 hover:bg-slate-100 transition-colors relative cursor-pointer"
+              aria-label="Alerts"
+            >
+              <BellIcon size={19} />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white"></span>
+            </button>
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none cursor-pointer"
+              aria-label="Toggle navigation menu"
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-20 sm:pb-0">
+          {page === "dashboard" && <Dashboard onNavigate={navigate} />}
+          {page === "internships" && <Internships onNavigate={navigate} />}
+          {page === "resume" && <ResumeUpload onNavigate={navigate} />}
+          {page === "skills" && <SkillGap onNavigate={navigate} />}
+          {(page === "tracker" || (page as string) === "applications") && (
+            <ApplicationTracker onNavigate={navigate} />
+          )}
+          {page === "saved" && <Saved onNavigate={navigate} />}
+          {page === "notifications" && <Notifications onNavigate={navigate} />}
+          {page === "profile" && <Profile />}
+          {page === "settings" && <SettingsPage onNavigate={navigate} />}
+        </main>
+
+        {/* Mobile Bottom Navigation Bar (Phones < 640px) */}
+        <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-1.5 px-2 flex justify-around items-center z-40 shadow-lg">
+          {[
+            { id: "dashboard", label: "Overview", icon: HomeIcon },
+            { id: "internships", label: "Jobs", icon: BriefcaseIcon },
+            { id: "resume", label: "Resume", icon: FileTextIcon },
+            { id: "skills", label: "Skills", icon: ZapIcon },
+            { id: "profile", label: "Profile", icon: UserIcon },
+          ].map(({ id, label, icon: Icon }) => {
+            const isActive = page === id
+            return (
+              <button
+                key={id}
+                onClick={() => navigate(id)}
+                className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
+                  isActive
+                    ? "text-indigo-600 font-bold"
+                    : "text-slate-500 hover:text-slate-900 font-medium"
+                }`}
+              >
+                <Icon
+                  size={19}
+                  className={
+                    isActive
+                      ? "text-indigo-600 scale-105 transition-transform"
+                      : "text-slate-400"
+                  }
+                />
+                <span className="text-[10px] tracking-tight">{label}</span>
+              </button>
+            )
+          })}
+        </nav>
+      </div>
     </div>
   )
 }
@@ -340,7 +462,7 @@ function SettingsPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   ]
 
   return (
-    <div className="p-8 max-w-4xl mx-auto w-full font-sans">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto w-full font-sans">
       <div className="mb-10">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-2">
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-emerald-500">Settings</span>

@@ -789,7 +789,7 @@ export const api = {
         })()
 
         const timeoutPromise = new Promise<LiveJob[]>((resolve) =>
-          setTimeout(() => resolve([]), 3500),
+          setTimeout(() => resolve([]), 1600),
         )
 
         pool = await Promise.race([liveFetchPromise, timeoutPromise])

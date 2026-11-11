@@ -18,6 +18,7 @@ import {
   syncAndPurgeRemovedJobs,
   getSafeApplyUrl,
   matchLocation,
+  matchAndRankJobs,
 } from "../jobServices"
 
 interface Props {
@@ -62,6 +63,15 @@ export const INTERNSHIP_CATEGORIES = [
 export default function Internships({ onNavigate }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const [country, setCountry] = useState<string>(() => {
     try {
       const s = localStorage.getItem("internhub_user_preferences")
@@ -113,7 +123,7 @@ export default function Internships({ onNavigate }: Props) {
       let fetched: any[] = []
       const activeCat = INTERNSHIP_CATEGORIES.find((c) => c.id === selectedCategory)
       const catQuery = activeCat && activeCat.id !== "all" ? activeCat.query : ""
-      const combinedSearch = [catQuery, search].filter(Boolean).join(" ").trim()
+      const combinedSearch = [catQuery, debouncedSearch].filter(Boolean).join(" ").trim()
 
       if (!combinedSearch) {
         fetched = await api.getRecommendations(country, stateCity, workMode)
@@ -141,7 +151,6 @@ export default function Internships({ onNavigate }: Props) {
           skills = prof.profile?.skills || []
           pRole = pRole || prof.profile?.domain || ""
         }
-        const { matchAndRankJobs } = await import("../jobServices")
         const ranked = matchAndRankJobs(
           {
             extracted_skills: skills || [],
@@ -151,14 +160,14 @@ export default function Internships({ onNavigate }: Props) {
             primary_role: pRole || (activeCat && activeCat.id !== "all" ? activeCat.label : ""),
             predicted_roles: cProf.predicted_roles || [],
             preferred_work_mode: workMode,
-            preferred_location: stateCity || search,
+            preferred_location: stateCity || debouncedSearch,
           },
           rawList,
         )
 
         // Filter by user search query if entered
-        if (search.trim()) {
-          const q = search.toLowerCase().trim()
+        if (debouncedSearch.trim()) {
+          const q = debouncedSearch.toLowerCase().trim()
           fetched = ranked.filter(
             (job: any) =>
               job.title.toLowerCase().includes(q) ||
@@ -215,7 +224,7 @@ export default function Internships({ onNavigate }: Props) {
     window.addEventListener("internhub_profile_updated", handleProfileUpdate)
     return () =>
       window.removeEventListener("internhub_profile_updated", handleProfileUpdate)
-  }, [selectedCategory, search, country, stateCity, workMode])
+  }, [selectedCategory, debouncedSearch, country, stateCity, workMode])
 
   const toggleSave = async (id: string, jobObj?: any) => {
     try {
@@ -266,7 +275,7 @@ export default function Internships({ onNavigate }: Props) {
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto w-full font-sans">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full font-sans">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
         <div>

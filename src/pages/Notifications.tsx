@@ -115,7 +115,7 @@ export default function Notifications({ onNavigate }: Props) {
   const unreadCount = notifications.filter((n) => n.unread).length
 
   return (
-    <div className="p-8 max-w-3xl mx-auto w-full font-sans">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto w-full font-sans">
       <div className="flex justify-between items-center mb-10">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-2">

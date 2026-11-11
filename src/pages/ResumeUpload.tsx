@@ -84,44 +84,17 @@ export default function ResumeUpload({ onNavigate }: Props) {
     setCurrentStep(0)
 
     let apiCompleted = false
-    let progressCompleted = false
     let result: any = null
+    let interval: any = null
 
-    api
-      .analyzeResume(file)
-      .then((res) => {
-        result = res
-        apiCompleted = true
-        checkAndComplete()
-      })
-      .catch((err) => {
-        console.error(err)
-        apiCompleted = true
-        checkAndComplete()
-      })
-
-    let prog = 0
-    let step = 0
-    const interval = setInterval(() => {
-      prog += Math.random() * 14 + 8
-      step = Math.min(
-        Math.floor(prog / (100 / analysisSteps.length)),
-        analysisSteps.length - 1,
-      )
-      setProgress(Math.min(prog, 100))
-      setCurrentStep(step)
-      if (prog >= 100) {
-        clearInterval(interval)
-        progressCompleted = true
-        checkAndComplete()
-      }
-    }, 140)
-
-    function checkAndComplete() {
-      if (apiCompleted && progressCompleted) {
-        setResultData(result)
-        if (result?.primary_role) {
-          setRoadmapRole(result.primary_role)
+    const finishImmediately = (finalResult: any) => {
+      if (interval) clearInterval(interval)
+      setProgress(100)
+      setCurrentStep(analysisSteps.length - 1)
+      setTimeout(() => {
+        setResultData(finalResult)
+        if (finalResult?.primary_role) {
+          setRoadmapRole(finalResult.primary_role)
         }
         setStage("result")
 
@@ -129,8 +102,34 @@ export default function ResumeUpload({ onNavigate }: Props) {
           .getRecommendations()
           .then((jobs) => setRecommendedJobs(jobs.slice(0, 4)))
           .catch((e) => console.error(e))
-      }
+      }, 180)
     }
+
+    api
+      .analyzeResume(file)
+      .then((res) => {
+        result = res
+        apiCompleted = true
+        finishImmediately(res)
+      })
+      .catch((err) => {
+        console.error(err)
+        apiCompleted = true
+        finishImmediately(null)
+      })
+
+    let prog = 0
+    let step = 0
+    interval = setInterval(() => {
+      if (apiCompleted) return
+      prog += Math.random() * 18 + 12
+      step = Math.min(
+        Math.floor(prog / (100 / analysisSteps.length)),
+        analysisSteps.length - 1,
+      )
+      setProgress(Math.min(prog, 94))
+      setCurrentStep(step)
+    }, 110)
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -208,7 +207,7 @@ export default function ResumeUpload({ onNavigate }: Props) {
     : []
 
   return (
-    <div className="p-8 max-w-6xl mx-auto w-full font-sans">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full font-sans">
       <div className="mb-10">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-3">
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">AI/ML Resume</span> Analysis & Recommendation System

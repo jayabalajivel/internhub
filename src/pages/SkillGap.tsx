@@ -162,7 +162,7 @@ export default function SkillGap({ onNavigate }: Props) {
     matchPercentage >= 70 ? "#10b981" : matchPercentage >= 40 ? "#f59e0b" : "#ef4444"
 
   return (
-    <div className="p-6 md:p-8 max-w-6xl mx-auto w-full font-sans transition-all">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full font-sans transition-all">
       {/* HEADER */}
       <div className="mb-8">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-2">

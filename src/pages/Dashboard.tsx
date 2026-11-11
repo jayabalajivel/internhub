@@ -233,7 +233,7 @@ export default function Dashboard({ onNavigate }: Props) {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto w-full font-sans">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full font-sans">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
@@ -401,13 +401,42 @@ export default function Dashboard({ onNavigate }: Props) {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[
-              { label: 'Applied', val: statusCounts.applied, icon: '📤', color: 'blue' },
-              { label: 'Interviewing', val: statusCounts.interviewing, icon: '🎯', color: 'indigo' },
-              { label: 'Offered', val: statusCounts.offered, icon: '🎉', color: 'emerald' },
-              { label: 'Rejected', val: statusCounts.rejected, icon: '✗', color: 'rose' },
+              {
+                label: "Applied",
+                val: statusCounts.applied,
+                icon: "📤",
+                bg: "bg-blue-50 border-blue-100",
+                text: "text-blue-600",
+              },
+              {
+                label: "Interviewing",
+                val: statusCounts.interviewing,
+                icon: "🎯",
+                bg: "bg-indigo-50 border-indigo-100",
+                text: "text-indigo-600",
+              },
+              {
+                label: "Offered",
+                val: statusCounts.offered,
+                icon: "🎉",
+                bg: "bg-emerald-50 border-emerald-100",
+                text: "text-emerald-600",
+              },
+              {
+                label: "Rejected",
+                val: statusCounts.rejected,
+                icon: "✗",
+                bg: "bg-rose-50 border-rose-100",
+                text: "text-rose-600",
+              },
             ].map((stat, i) => (
-              <div key={i} className={`bg-${stat.color}-50 border border-${stat.color}-100 rounded-xl p-4 flex flex-col justify-between`}>
-                <div className={`text-[10px] font-bold text-${stat.color}-600 uppercase tracking-wider mb-2 flex items-center gap-1.5`}>
+              <div
+                key={i}
+                className={`${stat.bg} border rounded-xl p-4 flex flex-col justify-between`}
+              >
+                <div
+                  className={`text-[10px] font-bold ${stat.text} uppercase tracking-wider mb-2 flex items-center gap-1.5`}
+                >
                   <span>{stat.icon}</span> {stat.label}
                 </div>
                 <div className="text-3xl font-bold text-slate-800">{stat.val}</div>
