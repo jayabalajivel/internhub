@@ -200,33 +200,33 @@ async function fetchJobDataAPI(
 ): Promise<LiveJob[]> {
   try {
     const searchTitle = query || "intern"
-    const baseUrl =
-      window.location.hostname === "localhost"
-        ? "/api-jobdata"
-        : "https://jobdataapi.com"
-    const url = `${baseUrl}/api/jobs/?title=${encodeURIComponent(searchTitle)}${
-      location ? `&location=${encodeURIComponent(location)}` : ""
-    }`
+    const isBrowser = typeof window !== "undefined"
+    // Use /api-jobdata proxy route (supported by vite dev & vercel.json rewrite) to avoid browser CORS blocks
+    const primaryUrl = isBrowser
+      ? `/api-jobdata/api/jobs/?title=${encodeURIComponent(searchTitle)}${location ? `&location=${encodeURIComponent(location)}` : ""}`
+      : `https://jobdataapi.com/api/jobs/?title=${encodeURIComponent(searchTitle)}${location ? `&location=${encodeURIComponent(location)}` : ""}`
 
-    const res = await fetchWithTimeout(url, {
-      headers: {
-        Authorization: `Api-Key ${JOB_API_KEYS.JOBDATA_KEY}`,
+    let res = await fetchWithTimeout(
+      primaryUrl,
+      {
+        headers: {
+          Authorization: `Api-Key ${JOB_API_KEYS.JOBDATA_KEY}`,
+        },
       },
-    }, 2000)
+      3000,
+    )
 
-    if (!res.ok) {
-      const directRes = await fetchWithTimeout(
+    if (!res.ok && isBrowser) {
+      res = await fetchWithTimeout(
         `https://jobdataapi.com/api/jobs/?title=${encodeURIComponent(searchTitle)}`,
         {
           headers: { Authorization: `Api-Key ${JOB_API_KEYS.JOBDATA_KEY}` },
         },
-        2000,
+        2500,
       )
-      if (!directRes.ok) return []
-      const directData = await directRes.json()
-      return parseJobDataResults(directData.results || [])
     }
 
+    if (!res.ok) return []
     const data = await res.json()
     return parseJobDataResults(data.results || [])
   } catch (err) {
@@ -292,28 +292,36 @@ async function fetchJoobleAPI(
   location: string,
 ): Promise<LiveJob[]> {
   try {
-    const baseUrl =
-      window.location.hostname === "localhost"
-        ? "/api-jooble"
-        : "https://jooble.org"
-    const url = `${baseUrl}/api/${JOB_API_KEYS.JOOBLE_KEY}`
+    const isBrowser = typeof window !== "undefined"
+    // Use /api-jooble proxy route (supported by vite dev & vercel.json rewrite) to avoid browser CORS blocks
+    const primaryUrl = isBrowser
+      ? `/api-jooble/api/${JOB_API_KEYS.JOOBLE_KEY}`
+      : `https://jooble.org/api/${JOB_API_KEYS.JOOBLE_KEY}`
     const body = {
       keywords: query || "intern developer",
       location: location || "India",
     }
 
-    let res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }, 2000)
-
-    if (!res.ok) {
-      res = await fetchWithTimeout(`https://jooble.org/api/${JOB_API_KEYS.JOOBLE_KEY}`, {
+    let res = await fetchWithTimeout(
+      primaryUrl,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-      }, 2000)
+      },
+      3000,
+    )
+
+    if (!res.ok && isBrowser) {
+      res = await fetchWithTimeout(
+        `https://jooble.org/api/${JOB_API_KEYS.JOOBLE_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        2500,
+      )
     }
 
     if (!res.ok) return []
@@ -369,18 +377,22 @@ async function fetchAdzunaAPI(
 ): Promise<LiveJob[]> {
   try {
     const searchTitle = query || "intern"
-    const baseUrl =
-      window.location.hostname === "localhost"
-        ? "/api-adzuna"
-        : "https://api.adzuna.com"
+    const isBrowser = typeof window !== "undefined"
     const country = location.toLowerCase().includes("us")
       ? "us"
       : location.toLowerCase().includes("uk")
         ? "gb"
         : "in"
-    const url = `${baseUrl}/v1/api/jobs/${country}/search/1?app_id=${JOB_API_KEYS.ADZUNA_APP_ID}&app_key=${JOB_API_KEYS.ADZUNA_KEY}&what=${encodeURIComponent(searchTitle)}`
+    const path = `/v1/api/jobs/${country}/search/1?app_id=${JOB_API_KEYS.ADZUNA_APP_ID}&app_key=${JOB_API_KEYS.ADZUNA_KEY}&what=${encodeURIComponent(searchTitle)}`
+    // Use /api-adzuna proxy route (supported by vite dev & vercel.json rewrite) to avoid browser CORS blocks
+    const primaryUrl = isBrowser
+      ? `/api-adzuna${path}`
+      : `https://api.adzuna.com${path}`
 
-    const res = await fetchWithTimeout(url, {}, 2000)
+    let res = await fetchWithTimeout(primaryUrl, {}, 3000)
+    if (!res.ok && isBrowser) {
+      res = await fetchWithTimeout(`https://api.adzuna.com${path}`, {}, 2500)
+    }
     if (!res.ok) return []
 
     const data = await res.json()
@@ -582,25 +594,25 @@ export async function getAggregatedLiveJobs(
       fetchJoobleAPI(searchQuery || "intern", "Tamil Nadu"), // specific fetch for local TN jobs
     ])
 
-  const liveList: LiveJob[] = []
+  // Multi-Provider Balanced Interleaving:
+  // Interleave results from Jooble, JobDataAPI, Adzuna, Remotive, and Arbeitnow so no single API dominates
+  const sources: LiveJob[][] = [
+    joobleRes.status === "fulfilled" ? joobleRes.value : [],
+    tnJobsRes.status === "fulfilled" ? tnJobsRes.value : [],
+    jobDataRes.status === "fulfilled" ? jobDataRes.value : [],
+    adzunaRes.status === "fulfilled" ? adzunaRes.value : [],
+    remotiveRes.status === "fulfilled" ? remotiveRes.value : [],
+    arbeitnowRes.status === "fulfilled" ? arbeitnowRes.value : [],
+  ]
 
-  if (jobDataRes.status === "fulfilled") {
-    liveList.push(...jobDataRes.value)
-  }
-  if (joobleRes.status === "fulfilled") {
-    liveList.push(...joobleRes.value)
-  }
-  if (adzunaRes.status === "fulfilled") {
-    liveList.push(...adzunaRes.value)
-  }
-  if (remotiveRes.status === "fulfilled") {
-    liveList.push(...remotiveRes.value)
-  }
-  if (arbeitnowRes.status === "fulfilled") {
-    liveList.push(...arbeitnowRes.value)
-  }
-  if (tnJobsRes.status === "fulfilled") {
-    liveList.push(...tnJobsRes.value)
+  const liveList: LiveJob[] = []
+  const maxLen = Math.max(...sources.map((s) => s.length), 0)
+  for (let i = 0; i < maxLen; i++) {
+    for (const src of sources) {
+      if (i < src.length) {
+        liveList.push(src[i])
+      }
+    }
   }
 
   let results = liveList

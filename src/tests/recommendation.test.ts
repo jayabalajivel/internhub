@@ -526,6 +526,160 @@ console.log("\nSuite 13: Direct Application Link Safety & Authenticity")
 }
 
 // -----------------------------------------------------------------------------
+// Test Suite 14: Academic Question Paper vs Authentic Resume Guardrails
+// -----------------------------------------------------------------------------
+console.log("\nSuite 14: Academic Question Paper & Resume Classifier Guardrails")
+{
+  // Setup environment mocks for Node test runner
+  if (typeof globalThis.localStorage === "undefined") {
+    const storage = new Map<string, string>()
+    ;(globalThis as any).localStorage = {
+      getItem: (k: string) => storage.get(k) || null,
+      setItem: (k: string, v: string) => storage.set(k, v),
+      removeItem: (k: string) => storage.delete(k),
+      clear: () => storage.clear(),
+    }
+  }
+  if (typeof globalThis.window === "undefined") {
+    ;(globalThis as any).window = {
+      dispatchEvent: () => true,
+      location: { hostname: "localhost" },
+    }
+  }
+
+  const { api } = await import("../api.ts")
+
+  // 1. Question Paper / Examination Document
+  const qpText = [
+    "ANNA UNIVERSITY CHENNAI - 600 025",
+    "B.E. / B.Tech DEGREE EXAMINATION, NOVEMBER/DECEMBER 2024",
+    "Seventh Semester - Computer Science and Engineering",
+    "CS8492 - DATABASE MANAGEMENT SYSTEMS",
+    "(Regulation 2017)",
+    "Time: 3 Hours                          Maximum Marks: 100",
+    "PART - A (10 x 2 = 20 Marks)",
+    "Answer ALL Questions",
+    "1. Define functional dependency.",
+    "2. What are ACID properties in SQL transaction management?",
+    "3. State Boyce-Codd Normal Form (BCNF).",
+    "PART - B (5 x 13 = 65 Marks)",
+    "11. (a) Derive an expression for relational algebra and SQL queries.",
+    "12. Draw a neat sketch explaining B+ tree indexing in SQL database.",
+  ].join("\n")
+
+  const qpFile = new File([qpText], "CS8492_Exam_Question_Paper.txt", { type: "text/plain" })
+  const qpResult = await api.analyzeResume(qpFile)
+
+  assert(
+    qpResult.is_resume === false,
+    "Rejects Academic Exam Question Paper as a resume (is_resume === false)",
+  )
+  assert(
+    qpResult.document_type === "Academic Question Paper / Examination Paper",
+    "Classifies document as 'Academic Question Paper / Examination Paper'",
+  )
+  assert(
+    qpResult.extracted_skills.length === 0,
+    "Integrity Guard: 0 skills ingested from Question Paper questions",
+  )
+
+  // 2. Authentic Student Resume
+  const resumeText = [
+    "ARUN PRASAD",
+    "Bengaluru, Karnataka | arun.dev@college.edu | +91 9876543210",
+    "github.com/arunprasad | linkedin.com/in/arunprasad",
+    "",
+    "EDUCATION",
+    "Vellore Institute of Technology (VIT)",
+    "B.Tech Computer Science and Engineering | CGPA: 8.8/10 | 2022 - 2026",
+    "",
+    "TECHNICAL SKILLS",
+    "Languages: JavaScript, TypeScript, Python, Java, SQL",
+    "Frontend: React, Next.js, HTML5, CSS3, Tailwind CSS",
+    "Backend: Node.js, Express.js, PostgreSQL, MongoDB, REST APIs",
+    "Tools & Cloud: Git, Docker, AWS",
+    "",
+    "PROJECTS",
+    "E-Commerce Cloud Platform",
+    "Architected full-stack web application using React, Node.js, Express.js and PostgreSQL.",
+    "Implemented JWT authentication and Stripe checkout payment integration.",
+    "",
+    "Real-Time Collaborative Dashboard",
+    "Built data analytics monitoring dashboard in React, TypeScript, and SQL.",
+    "Integrated WebSockets for live telemetry and automated Jest test suites.",
+  ].join("\n")
+
+  const resumeFile = new File([resumeText], "Arun_Prasad_Resume.txt", { type: "text/plain" })
+  const resumeResult = await api.analyzeResume(resumeFile)
+
+  assert(
+    resumeResult.is_resume === true,
+    "Accepts authentic student technical resume (is_resume === true)",
+  )
+  assert(
+    resumeResult.extracted_skills.length >= 5,
+    "Successfully extracts technical skills from authentic resume",
+  )
+  assert(
+    resumeResult.primary_role.includes("Developer") || resumeResult.primary_role.includes("Full Stack"),
+    "Predicts accurate technical role (Full Stack / Developer)",
+  )
+  assert(
+    resumeResult.cgpa === "8.8/10",
+    "Accurately extracts student CGPA without fabrication (8.8/10)",
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Test Suite 15: Multi-Provider Live Aggregation Interleaving
+// -----------------------------------------------------------------------------
+console.log("\nSuite 15: Multi-Provider Balanced Source Diversity")
+{
+  const joobleJobs = [
+    createDummyJob("jb1", "Frontend Intern", "React developer", "Chennai"),
+    createDummyJob("jb2", "Node Intern", "Node backend", "Bangalore"),
+  ].map((j) => ({ ...j, source: "Jooble API (Live)" }))
+
+  const remotiveJobs = [
+    createDummyJob("rem1", "Python Intern", "Python remote", "Remote"),
+    createDummyJob("rem2", "DevOps Intern", "Docker remote", "Remote"),
+  ].map((j) => ({ ...j, source: "Remotive API (Live)" }))
+
+  const jobdataJobs = [
+    createDummyJob("jd1", "Java Intern", "Java Spring", "Hyderabad"),
+  ].map((j) => ({ ...j, source: "JobDataAPI (Live)" }))
+
+  // Interleave logic
+  const sources = [joobleJobs, jobdataJobs, remotiveJobs]
+  const interleaved: LiveJob[] = []
+  const maxLen = Math.max(...sources.map((s) => s.length))
+  for (let i = 0; i < maxLen; i++) {
+    for (const s of sources) {
+      if (i < s.length) interleaved.push(s[i])
+    }
+  }
+
+  assert(
+    interleaved[0].source === "Jooble API (Live)",
+    "First position belongs to Jooble API, preventing Remotive dominance",
+  )
+  assert(
+    interleaved[1].source === "JobDataAPI (Live)",
+    "Second position belongs to JobDataAPI (Live)",
+  )
+  assert(
+    interleaved[2].source === "Remotive API (Live)",
+    "Third position features Remotive API (Live)",
+  )
+  assert(
+    interleaved.some((j) => j.source.includes("Jooble")) &&
+      interleaved.some((j) => j.source.includes("JobDataAPI")) &&
+      interleaved.some((j) => j.source.includes("Remotive")),
+    "Multi-provider balanced blend confirmed across all sources",
+  )
+}
+
+// -----------------------------------------------------------------------------
 // Summary
 // -----------------------------------------------------------------------------
 console.log("\n=======================================================")

@@ -4,6 +4,18 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api-jooble/:path*",
+      "destination": "https://jooble.org/:path*"
+    },
+    {
+      "source": "/api-jobdata/:path*",
+      "destination": "https://jobdataapi.com/:path*"
+    },
+    {
+      "source": "/api-adzuna/:path*",
+      "destination": "https://api.adzuna.com/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

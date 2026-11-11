@@ -67,7 +67,8 @@ export default function Dashboard({ onNavigate }: Props) {
   const [candidateProfile, setCandidateProfile] = useState<any>(() => {
     try {
       const s = localStorage.getItem("internhub_candidate_profile")
-      return s ? JSON.parse(s) : null
+      const parsed = s ? JSON.parse(s) : null
+      return parsed && parsed.is_resume !== false ? parsed : null
     } catch {
       return null
     }
@@ -89,7 +90,10 @@ export default function Dashboard({ onNavigate }: Props) {
       try {
         const profileData = await api.getProfile()
         const candidateStr = localStorage.getItem("internhub_candidate_profile")
-        const cand = candidateStr ? JSON.parse(candidateStr) : null
+        let cand = candidateStr ? JSON.parse(candidateStr) : null
+        if (cand && cand.is_resume === false) {
+          cand = null
+        }
         setCandidateProfile(cand)
 
         const detectedName =

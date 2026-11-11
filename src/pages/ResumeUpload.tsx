@@ -17,6 +17,7 @@ import {
   RefreshIcon,
   BriefcaseIcon,
   AlertIcon,
+  HomeIcon,
 } from "../components/Icons"
 import { api } from "../api"
 import { ROLE_ROADMAPS, getRoleRoadmap } from "../roadmaps"
@@ -65,7 +66,7 @@ export default function ResumeUpload({ onNavigate }: Props) {
     if (cachedProfile) {
       try {
         const parsed = JSON.parse(cachedProfile)
-        if (parsed && parsed.extracted_skills) {
+        if (parsed && parsed.is_resume !== false && parsed.extracted_skills && parsed.extracted_skills.length >= 2) {
           setResultData(parsed)
           if (parsed.primary_role) {
             setRoadmapRole(parsed.primary_role)
@@ -82,6 +83,8 @@ export default function ResumeUpload({ onNavigate }: Props) {
     setStage("analyzing")
     setProgress(0)
     setCurrentStep(0)
+    setResultData(null)
+    setRecommendedJobs([])
 
     let apiCompleted = false
     let result: any = null
@@ -98,10 +101,14 @@ export default function ResumeUpload({ onNavigate }: Props) {
         }
         setStage("result")
 
-        api
-          .getRecommendations()
-          .then((jobs) => setRecommendedJobs(jobs.slice(0, 4)))
-          .catch((e) => console.error(e))
+        if (finalResult?.is_resume !== false && (finalResult?.extracted_skills?.length || 0) >= 2) {
+          api
+            .getRecommendations()
+            .then((jobs) => setRecommendedJobs(jobs.slice(0, 4)))
+            .catch((e) => console.error(e))
+        } else {
+          setRecommendedJobs([])
+        }
       }, 180)
     }
 
@@ -761,13 +768,19 @@ export default function ResumeUpload({ onNavigate }: Props) {
               <div className="flex flex-wrap gap-4 pt-4">
                 <button
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl text-sm font-semibold shadow-sm transition-colors flex items-center gap-2"
+                  onClick={() => onNavigate("dashboard")}
+                >
+                  <HomeIcon size={18} /> View on Overview
+                </button>
+                <button
+                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-6 py-3 rounded-xl text-sm font-semibold shadow-sm transition-colors flex items-center gap-2"
                   onClick={() => onNavigate("internships")}
                 >
                   <BriefcaseIcon size={18} /> Browse All Matched Internships
                 </button>
                 <button
                   className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-6 py-3 rounded-xl text-sm font-semibold shadow-sm transition-colors flex items-center gap-2"
-                  onClick={() => onNavigate("skillgap")}
+                  onClick={() => onNavigate("skills")}
                 >
                   <ZapIcon size={18} /> View Skill Gap & Roadmap
                 </button>

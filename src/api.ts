@@ -1,20 +1,20 @@
 import axios from "axios"
 import {
   getAggregatedLiveJobs,
-  LiveJob,
+  type LiveJob,
   matchAndRankJobs,
-  RankedJob,
+  type RankedJob,
   getSkillRegex,
   CANONICAL_SKILLS,
   normalizeSkill,
-  CandidateProfileData,
+  type CandidateProfileData,
   matchLocation,
   getSafeApplyUrl,
   isSkillSatisfied,
 } from "./jobServices.ts"
 import { DEFAULT_CURATED_JOBS } from "./defaultJobs.ts"
-import { supabase, isSupabaseConfigured } from "./lib/supabase"
-import { getRoleRoadmap, ROLE_ROADMAPS } from "./roadmaps"
+import { supabase, isSupabaseConfigured } from "./lib/supabase.ts"
+import { getRoleRoadmap, ROLE_ROADMAPS } from "./roadmaps.ts"
 
 // Backend Server URL
 const API_BASE_URL = "http://localhost:5000/api"
@@ -215,7 +215,7 @@ const mockAuth = {
         university: "",
         education: "B.Tech Engineering",
         classYear: "Class of 2026",
-        cgpa: "8.5/10",
+        cgpa: "",
         location: "Remote",
         stipendPreference: 0,
         workMode: "Remote",
@@ -248,6 +248,161 @@ const mockAuth = {
     localStorage.setItem("internhub_mock_user_profile", JSON.stringify(updated))
     return updated
   },
+}
+
+// Robust Document Text Extraction Helper (PDF with PDF.js + Pure JS stream fallback, DOCX, TXT)
+async function extractDocumentText(file: File): Promise<string> {
+  const fileName = (file.name || "").toLowerCase()
+  const fileType = (file.type || "").toLowerCase()
+  const isPdf = fileName.endsWith(".pdf") || fileType === "application/pdf"
+  const isDocx = fileName.endsWith(".docx") || fileType.includes("wordprocessingml")
+
+  // 1. PDF Extraction
+  if (isPdf) {
+    // A. Browser PDF.js Library
+    if (typeof window !== "undefined") {
+      try {
+        let pdfLib = (window as any).pdfjsLib || (window as any)["pdfjs-dist/build/pdf"]
+        if (!pdfLib && typeof document !== "undefined") {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement("script")
+            script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+            script.onload = () => resolve()
+            script.onerror = () => reject()
+            document.head.appendChild(script)
+          }).catch(() => {})
+          pdfLib = (window as any).pdfjsLib || (window as any)["pdfjs-dist/build/pdf"]
+        }
+
+        if (pdfLib) {
+          if (pdfLib.GlobalWorkerOptions && !pdfLib.GlobalWorkerOptions.workerSrc) {
+            pdfLib.GlobalWorkerOptions.workerSrc =
+              "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"
+          }
+          const arrayBuffer = await file.arrayBuffer()
+          const pdf = await pdfLib.getDocument({
+            data: arrayBuffer,
+            verbosity: 0,
+          }).promise
+          const pageTexts: string[] = []
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i)
+            const textContent = await page.getTextContent()
+            const items = textContent.items.map((item: any) => item.str)
+            pageTexts.push(items.join(" "))
+          }
+          const text = pageTexts.join("\n").trim()
+          if (text.length >= 20) {
+            return text
+          }
+        }
+      } catch (pdfErr) {
+        console.warn("Browser PDF.js extraction attempt:", pdfErr)
+      }
+    }
+
+    // B. Native Fallback Stream Token & Flate Extractor
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const uint8 = new Uint8Array(arrayBuffer)
+      const binaryStr = new TextDecoder("latin1").decode(uint8)
+
+      const extractedTokens: string[] = []
+      const tjRegex = /\(([^)]+)\)\s*Tj/g
+      let m: RegExpExecArray | null
+      while ((m = tjRegex.exec(binaryStr)) !== null) {
+        if (m[1] && m[1].length > 1) extractedTokens.push(m[1])
+      }
+
+      if (typeof DecompressionStream !== "undefined") {
+        const streamRegex = /<<[^>]*\/FlateDecode[^>]*>>\s*stream[\r\n]+([\s\S]*?)endstream/g
+        let streamMatch: RegExpExecArray | null
+        while ((streamMatch = streamRegex.exec(binaryStr)) !== null) {
+          try {
+            const sStart = streamMatch.index + streamMatch[0].indexOf("stream") + 6
+            const aStart = binaryStr.charCodeAt(sStart) === 13 && binaryStr.charCodeAt(sStart + 1) === 10
+              ? sStart + 2
+              : binaryStr.charCodeAt(sStart) === 10
+                ? sStart + 1
+                : sStart
+            const eIdx = binaryStr.indexOf("endstream", aStart)
+            if (eIdx > aStart) {
+              const rawSlice = uint8.slice(aStart, eIdx)
+              const ds = new DecompressionStream("deflate")
+              const writer = ds.writable.getWriter()
+              writer.write(rawSlice)
+              writer.close()
+              const reader = ds.readable.getReader()
+              const chunks: Uint8Array[] = []
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                chunks.push(value)
+              }
+              const total = chunks.reduce((a, c) => a + c.length, 0)
+              const combined = new Uint8Array(total)
+              let off = 0
+              for (const c of chunks) {
+                combined.set(c, off)
+                off += c.length
+              }
+              const decomp = new TextDecoder("utf-8").decode(combined)
+              let subM: RegExpExecArray | null
+              const subRegex = /\(([^)]+)\)\s*Tj/g
+              while ((subM = subRegex.exec(decomp)) !== null) {
+                if (subM[1] && subM[1].length > 1) extractedTokens.push(subM[1])
+              }
+            }
+          } catch {}
+        }
+      }
+
+      if (extractedTokens.length >= 10) {
+        return extractedTokens.join(" ")
+      }
+    } catch (e) {
+      console.warn("Pure JS PDF stream extraction:", e)
+    }
+  }
+
+  // 2. DOCX Extraction
+  if (isDocx) {
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const uint8 = new Uint8Array(arrayBuffer)
+      const binStr = new TextDecoder("latin1").decode(uint8)
+      const wtRegex = /<w:t[^>]*>(.*?)<\/w:t>/g
+      const textTokens: string[] = []
+      let m: RegExpExecArray | null
+      while ((m = wtRegex.exec(binStr)) !== null) {
+        if (m[1]) textTokens.push(m[1])
+      }
+      if (textTokens.length > 5) {
+        return textTokens.join(" ")
+      }
+    } catch (e) {
+      console.warn("DOCX text extraction:", e)
+    }
+  }
+
+  // 3. Fallback Reader (supports file.text() in modern browsers and Node, with FileReader fallback)
+  if (typeof file.text === "function") {
+    try {
+      const t = await file.text()
+      if (t) return t
+    } catch {}
+  }
+
+  if (typeof FileReader !== "undefined") {
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve((e.target?.result as string) || "")
+      reader.onerror = () => resolve("")
+      reader.readAsText(file)
+    })
+  }
+
+  return ""
 }
 
 // API EXPORTS
@@ -803,7 +958,7 @@ export const api = {
         })()
 
         const timeoutPromise = new Promise<LiveJob[]>((resolve) =>
-          setTimeout(() => resolve([]), 1600),
+          setTimeout(() => resolve([]), 4000),
         )
 
         pool = await Promise.race([liveFetchPromise, timeoutPromise])
@@ -1451,39 +1606,7 @@ export const api = {
         return res.data
       },
       async () => {
-        let rawText = ""
-        const isPdf =
-          file.name.toLowerCase().endsWith(".pdf") ||
-          file.type === "application/pdf"
-
-        if (isPdf && (window as any).pdfjsLib) {
-          try {
-            const arrayBuffer = await file.arrayBuffer()
-            const pdf = await (window as any).pdfjsLib.getDocument({
-              data: arrayBuffer,
-            }).promise
-            let pageTexts = []
-            for (let i = 1; i <= pdf.numPages; i++) {
-              const page = await pdf.getPage(i)
-              const textContent = await page.getTextContent()
-              const items = textContent.items.map((item: any) => item.str)
-              pageTexts.push(items.join(" "))
-            }
-            rawText = pageTexts.join("\n")
-          } catch (err) {
-            console.warn("Browser PDF.js extraction error:", err)
-          }
-        }
-
-        if (!rawText || rawText.trim().length < 20) {
-          rawText = await new Promise<string>((resolve) => {
-            const reader = new FileReader()
-            reader.onload = (e) => resolve(e.target?.result as string || "")
-            reader.onerror = () => resolve("")
-            reader.readAsText(file)
-          })
-        }
-
+        const rawText = await extractDocumentText(file)
         const textLower = rawText.toLowerCase()
 
         // 1. Multi-Class Document Classifier
@@ -1531,7 +1654,44 @@ export const api = {
           /pcs\b/i,
         ]
 
-        // 1B. Academic Research / Journal Papers
+        // 1B. Academic Question Paper / University Examination Paper
+        const questionPaperPatterns = [
+          /\bquestion\s+paper\b/i,
+          /\bmodel\s+question\s+paper\b/i,
+          /\bdegree\s+examinations?\b/i,
+          /\bsemester\s+examinations?\b/i,
+          /\bend\s+semester\b/i,
+          /\bmid\s+semester\b/i,
+          /\binternal\s+assessment\b/i,
+          /\binternal\s+test\b/i,
+          /\buniversity\s+examinations?\b/i,
+          /\btime\s*:\s*(?:3|2)\s*(?:hours?|hrs?)\b/i,
+          /\bmax(?:imum)?\s*\.?\s*marks\s*:\s*\d{2,3}\b/i,
+          /\bpart\s*[-–—]?\s*[abc]\b/i,
+          /\bsection\s*[-–—]?\s*[abc]\b/i,
+          /\banswer\s+all\s+questions\b/i,
+          /\banswer\s+any\s+(?:five|\d+)\b/i,
+          /\beach\s+question\s+carries\b/i,
+          /\bmarks\s+each\b/i,
+          /\b\(\s*\d+\s*[xX*]\s*\d+\s*=\s*\d+\s*(?:marks)?\s*\)/i,
+          /\bq\s*\.?\s*no\b/i,
+          /\bquestion\s+no\b/i,
+          /\bderive\s+an\s+expression\b/i,
+          /\bdraw\s+(?:a\s+)?neat\s+sketch\b/i,
+          /\bexplain\s+the\s+working\s+principle\b/i,
+          /\bdifferentiate\s+between\b/i,
+          /\bwrite\s+short\s+notes\s+on\b/i,
+          /\bstate\s+and\s+(?:explain|prove)\b/i,
+          /\bsubject\s+code\b/i,
+          /\bcourse\s+code\b/i,
+          /\bregister\s+number\b/i,
+          /\breg\s*\.?\s*no\b/i,
+          /\broll\s+no\b/i,
+          /\bbranch\s*\/\s*semester\b/i,
+          /\bregulation\s*20\d\d\b/i,
+        ]
+
+        // 1C. Academic Research / Journal Papers
         const researchPatterns = [
           /\babstract\b/i,
           /\bintroduction\b/i,
@@ -1555,7 +1715,7 @@ export const api = {
           /\barxiv\b/i,
         ]
 
-        // 1C. Employer Job Descriptions / Vacancy Notices
+        // 1D. Employer Job Descriptions / Vacancy Notices
         const jobDescPatterns = [
           /\bjob\s+description\b/i,
           /\babout\s+the\s+role\b/i,
@@ -1581,7 +1741,7 @@ export const api = {
           /\bpart-time\b/i,
         ]
 
-        // 1D. Student / Candidate Resume Patterns
+        // 1E. Student / Candidate Resume Patterns
         const resumePatterns = [
           /\beducation\b/i,
           /\bexperience\b/i,
@@ -1609,6 +1769,7 @@ export const api = {
         ]
 
         const billMatches = billPatterns.filter((p) => p.test(textLower))
+        const qpMatches = questionPaperPatterns.filter((p) => p.test(textLower))
         const researchMatches = researchPatterns.filter((p) => p.test(textLower))
         const jobDescMatches = jobDescPatterns.filter((p) => p.test(textLower))
         const resumeMatches = resumePatterns.filter((p) => p.test(textLower))
@@ -1641,7 +1802,43 @@ export const api = {
           }
         }
 
-        // Check 2: Academic Research / Journal Publication (e.g. IEEE / Springer / arXiv paper)
+        // Check 2: Academic Question Paper / University Examination Paper
+        const hasExamHeader =
+          /question\s+paper|degree\s+exam|semester\s+exam|internal\s+assessment|internal\s+test|university\s+exam|model\s+question|anna\s+university|vtu\b|jntu\b/i.test(
+            textLower,
+          )
+        const hasExamStructure =
+          /max(?:imum)?\s*\.?\s*marks|time\s*:\s*\d|part\s*[-–—]?\s*[abc]|answer\s+all\s+questions|answer\s+any|marks\s+each|\(\s*\d+\s*[xX*]\s*\d+\s*=\s*\d+\s*\)|q\s*\.?\s*no|subject\s+code|course\s+code/i.test(
+            textLower,
+          )
+        const isNotResume = !/curriculum\s+vitae|my\s+projects|work\s+experience|career\s+objective|candidate\s+profile|technical\s+skills\s*:/i.test(
+          textLower,
+        )
+
+        const isQuestionPaper =
+          (hasExamHeader && hasExamStructure && isNotResume) ||
+          (qpMatches.length >= 4 && isNotResume) ||
+          qpMatches.length >= 6
+        if (isQuestionPaper) {
+          return {
+            is_resume: false,
+            isResume: false,
+            document_type: "Academic Question Paper / Examination Paper",
+            documentType: "Academic Question Paper / Examination Paper",
+            warning:
+              "Document Rejected: The uploaded document appears to be an Academic Question Paper / University Examination Document rather than a Student Resume/CV. Your candidate profile on Overview was protected and not modified. Please upload an authentic personal resume.",
+            extracted_skills: [],
+            skills: [],
+            projects: [],
+            score: 0,
+            primary_role: null,
+            predicted_roles: [],
+            skill_gaps: { role: "N/A", already_have: [], need_to_learn: [] },
+            learning_roadmap: [],
+          }
+        }
+
+        // Check 3: Academic Research / Journal Publication (e.g. IEEE / Springer / arXiv paper)
         const isResearch =
           researchMatches.length >= 3 ||
           (/abstract/i.test(textLower) &&
@@ -1668,7 +1865,7 @@ export const api = {
           }
         }
 
-        // Check 3: Employer Job Description / Vacancy Notice
+        // Check 4: Employer Job Description / Vacancy Notice
         const isJobDesc =
           jobDescMatches.length >= 3 &&
           !/education|cgpa|b\.tech|b\.e|curriculum vitae|my projects/i.test(
