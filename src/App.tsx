@@ -38,6 +38,14 @@ const getInitialPage = (): Page => {
   if (qPage === "dashboard") {
     return "dashboard"
   }
+  // Check if returning from Supabase OAuth redirect callback
+  if (
+    typeof window !== "undefined" &&
+    (window.location.hash.includes("access_token") ||
+      window.location.search.includes("code="))
+  ) {
+    return "dashboard"
+  }
   // Default to login / auth page directly
   return "auth"
 }

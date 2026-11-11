@@ -252,13 +252,21 @@ export const api = {
   googleLogin: async () => {
     if (isSupabaseConfigured() && supabase) {
       try {
+        const redirectOrigin =
+          typeof window !== "undefined" && window.location.origin
+            ? window.location.origin
+            : "https://internhub-neon.vercel.app"
+
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: window.location.origin,
+            redirectTo: redirectOrigin,
           },
         })
         if (error) throw new Error(error.message)
+        if (data?.url && typeof window !== "undefined") {
+          window.location.assign(data.url)
+        }
         return { user: data.url, token: "oauth_redirect" }
       } catch (err: any) {
         console.warn("Supabase Google login unavailable, falling back to mock login:", err)
