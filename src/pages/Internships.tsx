@@ -48,7 +48,19 @@ function TrustBadge({ score }: { score: number }) {
   )
 }
 
+export const INTERNSHIP_CATEGORIES = [
+  { id: "all", label: "All Disciplines", query: "", icon: "🌐" },
+  { id: "software", label: "Software", query: "software developer full stack frontend backend engineer intern", icon: "💻" },
+  { id: "cloud", label: "Cloud & DevOps", query: "cloud devops aws azure kubernetes intern", icon: "☁️" },
+  { id: "eee", label: "Electrical (EEE)", query: "electrical engineering eee power systems matlab intern", icon: "⚡" },
+  { id: "ece", label: "Electronics (ECE)", query: "electronics communication ece embedded vlsi circuit intern", icon: "📡" },
+  { id: "civil", label: "Civil", query: "civil engineering structural staad revit bim intern", icon: "🏗️" },
+  { id: "ai", label: "AI & Data Science", query: "artificial intelligence machine learning data science python intern", icon: "🤖" },
+  { id: "mechanical", label: "Mechanical", query: "mechanical engineering cad solidworks ansys intern", icon: "⚙️" },
+]
+
 export default function Internships({ onNavigate }: Props) {
+  const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [search, setSearch] = useState("")
   const [country, setCountry] = useState<string>(() => {
     try {
@@ -99,11 +111,15 @@ export default function Internships({ onNavigate }: Props) {
     setLoading(true)
     try {
       let fetched: any[] = []
-      if (!search) {
+      const activeCat = INTERNSHIP_CATEGORIES.find((c) => c.id === selectedCategory)
+      const catQuery = activeCat && activeCat.id !== "all" ? activeCat.query : ""
+      const combinedSearch = [catQuery, search].filter(Boolean).join(" ").trim()
+
+      if (!combinedSearch) {
         fetched = await api.getRecommendations(country, stateCity, workMode)
       } else {
         const rawList = await api.getInternships(
-          search,
+          combinedSearch,
           stateCity,
           workMode === "Remote",
           country,
@@ -132,7 +148,7 @@ export default function Internships({ onNavigate }: Props) {
             strong_skills: cProf.strong_skills || skills || [],
             project_skills: cProf.project_skills || [],
             experience_skills: cProf.experience_skills || [],
-            primary_role: pRole || "",
+            primary_role: pRole || (activeCat && activeCat.id !== "all" ? activeCat.label : ""),
             predicted_roles: cProf.predicted_roles || [],
             preferred_work_mode: workMode,
             preferred_location: stateCity || search,
@@ -140,15 +156,19 @@ export default function Internships({ onNavigate }: Props) {
           rawList,
         )
 
-        // Filter by search query (matching title, company, description, or location synonyms)
-        const q = search.toLowerCase().trim()
-        fetched = ranked.filter(
-          (job: any) =>
-            job.title.toLowerCase().includes(q) ||
-            job.company.toLowerCase().includes(q) ||
-            job.description.toLowerCase().includes(q) ||
-            matchLocation(job.location, q),
-        )
+        // Filter by user search query if entered
+        if (search.trim()) {
+          const q = search.toLowerCase().trim()
+          fetched = ranked.filter(
+            (job: any) =>
+              job.title.toLowerCase().includes(q) ||
+              job.company.toLowerCase().includes(q) ||
+              job.description.toLowerCase().includes(q) ||
+              matchLocation(job.location, q),
+          )
+        } else {
+          fetched = ranked
+        }
       }
       setJobs(fetched || [])
 
@@ -195,7 +215,7 @@ export default function Internships({ onNavigate }: Props) {
     window.addEventListener("internhub_profile_updated", handleProfileUpdate)
     return () =>
       window.removeEventListener("internhub_profile_updated", handleProfileUpdate)
-  }, [search, country, stateCity, workMode])
+  }, [selectedCategory, search, country, stateCity, workMode])
 
   const toggleSave = async (id: string, jobObj?: any) => {
     try {
@@ -473,6 +493,37 @@ export default function Internships({ onNavigate }: Props) {
               </select>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Engineering Discipline Category Filter */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+            Filter by Engineering Discipline
+          </span>
+          <span className="text-xs text-indigo-600 font-bold">
+            {INTERNSHIP_CATEGORIES.find((c) => c.id === selectedCategory)?.label} ({jobs.length} listings)
+          </span>
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          {INTERNSHIP_CATEGORIES.map((cat) => {
+            const isSelected = selectedCategory === cat.id
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border shadow-sm ${
+                  isSelected
+                    ? "bg-indigo-600 border-indigo-600 text-white shadow-indigo-200 shadow-md scale-[1.02]"
+                    : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                <span>{cat.icon}</span>
+                <span>{cat.label}</span>
+              </button>
+            )
+          })}
         </div>
       </div>
 

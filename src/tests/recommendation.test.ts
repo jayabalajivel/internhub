@@ -395,6 +395,39 @@ console.log("\nSuite 10: Multi-Job Ranking Order & NDCG Evaluation")
 }
 
 // -----------------------------------------------------------------------------
+// Test Suite 11: Full Stack Candidate Matching Full Stack Internship Job
+// -----------------------------------------------------------------------------
+console.log("\nSuite 11: Full Stack Candidate Alignment on Full Stack Opportunity")
+{
+  const fullstackProfile: CandidateProfileData = {
+    extracted_skills: ["React", "JavaScript", "HTML", "CSS", "Node.js", "SQL", "Git"],
+    strong_skills: ["React", "Node.js"],
+    project_skills: ["React", "Node.js", "SQL"],
+    primary_role: "Full Stack Developer",
+  }
+
+  const fullstackJob = createDummyJob(
+    "j_fs",
+    "Full Stack Developer Intern",
+    "Join our development team building modern web features. Great opportunity for students.",
+  )
+
+  const ranked = matchAndRankJobs(fullstackProfile, [fullstackJob])
+  assert(
+    ranked[0].matchPercentage >= 75,
+    `Full Stack profile on Full Stack job must score High (>= 75%), got ${ranked[0].matchPercentage}%`,
+  )
+  assert(
+    ranked[0].relevanceCategory === "High",
+    `Relevance category must be 'High', got ${ranked[0].relevanceCategory}`,
+  )
+  assert(
+    ranked[0].matchedSkills.length >= 3,
+    `Matched skills must be at least 3, got ${ranked[0].matchedSkills.length} (${ranked[0].matchedSkills.join(", ")})`,
+  )
+}
+
+// -----------------------------------------------------------------------------
 // Summary
 // -----------------------------------------------------------------------------
 console.log("\n=======================================================")

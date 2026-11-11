@@ -1266,6 +1266,26 @@ export function getSafeApplyUrl(job: any): string {
 }
 
 // Extract Skills and Partition Required vs Preferred from Job Listing
+export const ROLE_IMPLIED_SKILLS: Record<string, string[]> = {
+  "full stack": ["React", "Node.js", "JavaScript", "HTML", "CSS", "SQL"],
+  "fullstack": ["React", "Node.js", "JavaScript", "HTML", "CSS", "SQL"],
+  "frontend": ["React", "JavaScript", "HTML", "CSS", "TypeScript"],
+  "backend": ["Node.js", "Python", "Java", "SQL", "REST API"],
+  "python": ["Python", "Django", "Flask", "SQL", "FastAPI"],
+  "java": ["Java", "Spring Boot", "SQL", "MySQL"],
+  "mechanical": ["AutoCAD", "SolidWorks", "ANSYS", "GD&T", "CAD"],
+  "electrical": ["Circuit Design", "Power Systems", "MATLAB", "PLC"],
+  "eee": ["Circuit Design", "Power Systems", "MATLAB", "PLC"],
+  "ece": ["Embedded C", "Microcontrollers", "VLSI", "PCB Design"],
+  "embedded": ["Embedded C", "Microcontrollers", "C", "C++", "RTOS"],
+  "civil": ["AutoCAD", "STAAD Pro", "ETABS", "Structural Analysis"],
+  "data science": ["Python", "Pandas", "NumPy", "Machine Learning", "SQL"],
+  "machine learning": ["Python", "Machine Learning", "PyTorch", "TensorFlow"],
+  "ai": ["Python", "Machine Learning", "Deep Learning", "TensorFlow"],
+  "cloud": ["AWS", "Docker", "Kubernetes", "Linux", "CI/CD"],
+  "devops": ["Docker", "Kubernetes", "CI/CD", "Linux", "AWS"],
+}
+
 export function extractJobSkills(title: string, description: string): {
   requiredSkills: string[]
   preferredSkills: string[]
@@ -1327,6 +1347,16 @@ export function extractJobSkills(title: string, description: string): {
       const reg = getSkillRegex(canonical)
       if (reg.test(fullContent)) {
         requiredFound.add(canonical)
+      }
+    }
+    // If still empty (e.g. brief job description), infer implied core skills from role title
+    if (requiredFound.size === 0) {
+      const titleLower = title.toLowerCase()
+      for (const [roleKey, impliedList] of Object.entries(ROLE_IMPLIED_SKILLS)) {
+        if (titleLower.includes(roleKey)) {
+          impliedList.forEach((s) => requiredFound.add(s))
+          break
+        }
       }
     }
   }

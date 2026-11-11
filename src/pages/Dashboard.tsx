@@ -13,6 +13,9 @@ import {
   ZapIcon,
   ArrowRightIcon,
   UploadIcon,
+  MapPinIcon,
+  AwardIcon,
+  CheckIcon,
 } from "../components/Icons"
 import { api } from "../api"
 
@@ -61,6 +64,14 @@ function CircleProgress({
 export default function Dashboard({ onNavigate }: Props) {
   const [studentName, setStudentName] = useState("Student")
   const [skills, setSkills] = useState<string[]>([])
+  const [candidateProfile, setCandidateProfile] = useState<any>(() => {
+    try {
+      const s = localStorage.getItem("internhub_candidate_profile")
+      return s ? JSON.parse(s) : null
+    } catch {
+      return null
+    }
+  })
   const [applications, setApplications] = useState<any[]>([])
   const [savedJobsCount, setSavedJobsCount] = useState(0)
   const [topMatches, setTopMatches] = useState<any[]>([])
@@ -77,8 +88,22 @@ export default function Dashboard({ onNavigate }: Props) {
     const fetchData = async () => {
       try {
         const profileData = await api.getProfile()
-        setStudentName(profileData.name || "Student")
-        const userSkills = profileData.profile?.skills || []
+        const candidateStr = localStorage.getItem("internhub_candidate_profile")
+        const cand = candidateStr ? JSON.parse(candidateStr) : null
+        setCandidateProfile(cand)
+
+        const detectedName =
+          cand?.name && cand.name !== "Engineering Student"
+            ? cand.name
+            : profileData.name && profileData.name !== "Student"
+              ? profileData.name
+              : "Student"
+        setStudentName(detectedName)
+
+        const userSkills =
+          cand?.extracted_skills && cand.extracted_skills.length > 0
+            ? cand.extracted_skills
+            : profileData.profile?.skills || []
         setSkills(userSkills)
 
         const apps = await api.getApplications()
@@ -235,6 +260,83 @@ export default function Dashboard({ onNavigate }: Props) {
           </button>
         </div>
       </div>
+
+      {/* Real-Time Processed Resume Overview Banner */}
+      {candidateProfile && (
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-500/20 rounded-3xl p-6 lg:p-7 mb-8 shadow-sm relative overflow-hidden">
+          <div className="absolute -top-12 -right-12 w-64 h-64 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="min-w-0 flex-1">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold uppercase tracking-wider mb-2.5">
+                <CheckIcon size={12} className="text-emerald-400" />
+                Verified Candidate Resume Profile
+              </div>
+              <h2 className="text-2xl font-bold tracking-tight text-white mb-2">
+                {candidateProfile.name || studentName}
+              </h2>
+              <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-300 mb-4">
+                <span className="font-semibold text-indigo-300 bg-indigo-950/80 border border-indigo-400/30 px-2.5 py-1 rounded-md">
+                  🎯 {candidateProfile.primary_role || candidateProfile.domain || "Full Stack Developer"}
+                </span>
+                <span className="bg-slate-800/80 px-2.5 py-1 rounded-md">
+                  🎓 {candidateProfile.education || "B.Tech Engineering"}
+                </span>
+                {candidateProfile.university && (
+                  <span className="bg-slate-800/80 px-2.5 py-1 rounded-md">
+                    🏛️ {candidateProfile.university}
+                  </span>
+                )}
+                {candidateProfile.cgpa && (
+                  <span className="text-amber-300 bg-slate-800/80 px-2.5 py-1 rounded-md font-semibold">
+                    ⭐ CGPA: {candidateProfile.cgpa}
+                  </span>
+                )}
+                {candidateProfile.location && (
+                  <span className="bg-slate-800/80 px-2.5 py-1 rounded-md">
+                    📍 {candidateProfile.location}
+                  </span>
+                )}
+              </div>
+
+              {/* Extracted Skills Badges */}
+              {skills.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Extracted Technical Stack ({skills.length} skills):
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
+                    {skills.map((s) => (
+                      <span
+                        key={s}
+                        className="bg-indigo-900/60 border border-indigo-400/20 text-indigo-200 text-[11px] font-semibold px-2 py-0.5 rounded-md"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0">
+              <button
+                onClick={() => onNavigate("skills")}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap"
+              >
+                <SparklesIcon size={14} />
+                Skill Gap & Roadmap
+              </button>
+              <button
+                onClick={() => onNavigate("resume")}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 whitespace-nowrap"
+              >
+                <UploadIcon size={14} />
+                Update Resume
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {skills.length === 0 ? (
         /* Empty State Prompt */

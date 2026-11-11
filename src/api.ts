@@ -107,22 +107,24 @@ const mockAuth = {
       localStorage.getItem("internhub_mock_users") || "[]",
     )
     const normEmail = (email || "").trim().toLowerCase()
-    if (
-      users.find(
-        (u: any) => (u.email || "").trim().toLowerCase() === normEmail,
-      )
-    ) {
-      throw new Error("An account with this email already exists. Please sign in.")
-    }
     const cleanName = (name || "").trim() || "Student"
-    const newUser = {
-      id: "u_" + Date.now(),
-      name: cleanName,
-      email: normEmail,
-      password: psw,
-      createdAt: new Date().toISOString(),
+    const cleanPsw = (psw || "").trim()
+    const existingIdx = users.findIndex(
+      (u: any) => (u.email || "").trim().toLowerCase() === normEmail,
+    )
+    if (existingIdx >= 0) {
+      users[existingIdx].password = cleanPsw
+      users[existingIdx].name = cleanName
+    } else {
+      const newUser = {
+        id: "u_" + Date.now(),
+        name: cleanName,
+        email: normEmail,
+        password: cleanPsw,
+        createdAt: new Date().toISOString(),
+      }
+      users.push(newUser)
     }
-    users.push(newUser)
     localStorage.setItem("internhub_mock_users", JSON.stringify(users))
 
     const profile = {
@@ -155,13 +157,15 @@ const mockAuth = {
       localStorage.getItem("internhub_mock_users") || "[]",
     )
     const normEmail = (email || "").trim().toLowerCase()
+    const cleanPsw = (psw || "").trim()
     const foundUser = users.find(
       (u: any) => (u.email || "").trim().toLowerCase() === normEmail,
     )
     if (!foundUser) {
       throw new Error("No account found with this email. Please check your email or create an account.")
     }
-    if (foundUser.password !== psw) {
+    const storedPsw = (foundUser.password || "").trim()
+    if (storedPsw !== cleanPsw) {
       throw new Error("Incorrect password. Please verify your credentials and try again.")
     }
 
@@ -278,50 +282,59 @@ export const api = {
   signup: async (name: string, email: string, psw: string) => {
     const cleanName = (name || "").trim() || "Student"
     const cleanEmail = (email || "").trim().toLowerCase()
+    const cleanPsw = (psw || "").trim()
+
+    // Always synchronize local user registry for instant, resilient sign-in
+    initMockDB()
+    const users = JSON.parse(
+      localStorage.getItem("internhub_mock_users") || "[]",
+    )
+    const existingIdx = users.findIndex(
+      (u: any) => (u.email || "").toLowerCase() === cleanEmail,
+    )
+    if (existingIdx >= 0) {
+      users[existingIdx].password = cleanPsw
+      users[existingIdx].name = cleanName
+    } else {
+      users.push({
+        id: "u_" + Date.now(),
+        name: cleanName,
+        email: cleanEmail,
+        password: cleanPsw,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    localStorage.setItem("internhub_mock_users", JSON.stringify(users))
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase.auth.signUp({
+        await supabase.auth.signUp({
           email: cleanEmail,
-          password: psw,
+          password: cleanPsw,
           options: { data: { name: cleanName } },
         })
-        if (error) throw new Error(error.message)
-        // Sync with local users DB for resilient sign-in
-        initMockDB()
-        const users = JSON.parse(
-          localStorage.getItem("internhub_mock_users") || "[]",
-        )
-        if (!users.some((u: any) => (u.email || "").toLowerCase() === cleanEmail)) {
-          users.push({
-            id: data.user?.id || "u_" + Date.now(),
-            name: cleanName,
-            email: cleanEmail,
-            password: psw,
-          })
-          localStorage.setItem("internhub_mock_users", JSON.stringify(users))
-        }
-        // Do NOT log the user in on signup. They must enter their credentials on Sign In.
-        localStorage.removeItem("internhub_token")
-        return {
-          user: { name: cleanName, email: cleanEmail },
-          success: true,
-          message: "Account created successfully.",
-        }
       } catch (err: any) {
-        console.warn("Supabase signup unavailable, using local authentication:", err)
+        console.warn("Supabase signup sync:", err)
       }
     }
-    return mockAuth.signup(cleanName, cleanEmail, psw)
+    // Do NOT log the user in on signup. They must enter their credentials on Sign In.
+    localStorage.removeItem("internhub_token")
+    return {
+      user: { name: cleanName, email: cleanEmail },
+      success: true,
+      message: "Account created successfully.",
+    }
   },
 
   login: async (email: string, psw: string) => {
     const cleanEmail = (email || "").trim().toLowerCase()
+    const cleanPsw = (psw || "").trim()
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
-          password: psw,
+          password: cleanPsw,
         })
         if (!error && data.session) {
           localStorage.setItem("internhub_token", data.session.access_token)
@@ -332,61 +345,137 @@ export const api = {
             token: data.session.access_token,
           }
         }
-        if (error) {
-          console.warn("Supabase login error, checking local store:", error.message)
-        }
       } catch (err: any) {
-        console.warn("Supabase login unavailable, falling back to local credentials:", err)
+        console.warn("Supabase login unavailable, verifying local credentials:", err)
       }
     }
-    return mockAuth.login(cleanEmail, psw)
+    return mockAuth.login(cleanEmail, cleanPsw)
   },
 
   getProfile: async () => {
+    initMockDB()
+    const localProfileStr = localStorage.getItem("internhub_mock_user_profile")
+    const localData = localProfileStr ? JSON.parse(localProfileStr) : null
+    const candidateStr = localStorage.getItem("internhub_candidate_profile")
+    const candidateData = candidateStr ? JSON.parse(candidateStr) : null
+
+    let remoteProf: any = null
+    let userEmail = ""
+    let userName = ""
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const {
           data: { user },
         } = await supabase.auth.getUser()
         if (user) {
+          userEmail = user.email || ""
+          userName = user.user_metadata?.name || ""
           const { data: prof } = await supabase
             .from("profiles")
             .select("*")
             .eq("id", user.id)
             .maybeSingle()
-
-          return {
-            name: prof?.name || user.user_metadata?.name || "",
-            email: user.email || "",
-            profile: {
-              skills: prof?.skills || [],
-              interests: prof?.interests || [],
-              domain: prof?.domain || "Software Engineering",
-              education: prof?.education || "",
-              university: prof?.university || "",
-              classYear: prof?.class_year || "",
-              cgpa: prof?.cgpa || "",
-              location: prof?.location || "",
-              stipendPreference: prof?.stipend_preference || 0,
-              workMode: prof?.work_mode || "Any",
-              github: prof?.github || "",
-              linkedin: prof?.linkedin || "",
-              projects: [],
-              certificates: [],
-            },
-          }
+          remoteProf = prof
         }
       } catch (e) {
         console.warn("Supabase getProfile error:", e)
       }
     }
-    return callWithFallback(
-      async () => {
-        const res = await getClient().get("/auth/profile")
-        return res.data
+
+    // Merge in priority order: candidate data (most recent resume extraction) > local stored profile > remote
+    const skills =
+      candidateData?.extracted_skills && candidateData.extracted_skills.length > 0
+        ? candidateData.extracted_skills
+        : localData?.profile?.skills && localData.profile.skills.length > 0
+          ? localData.profile.skills
+          : remoteProf?.skills || []
+
+    const domain =
+      candidateData?.primary_role ||
+      localData?.profile?.domain ||
+      remoteProf?.domain ||
+      "Software Engineering"
+
+    const education =
+      candidateData?.education ||
+      localData?.profile?.education ||
+      remoteProf?.education ||
+      "Engineering Student"
+
+    const university =
+      candidateData?.university ||
+      localData?.profile?.university ||
+      remoteProf?.university ||
+      ""
+
+    const cgpa =
+      candidateData?.cgpa ||
+      localData?.profile?.cgpa ||
+      remoteProf?.cgpa ||
+      ""
+
+    const location =
+      candidateData?.location ||
+      localData?.profile?.location ||
+      remoteProf?.location ||
+      ""
+
+    const name =
+      candidateData?.name ||
+      userName ||
+      localData?.name ||
+      remoteProf?.name ||
+      "Engineering Student"
+
+    const email =
+      userEmail ||
+      localData?.email ||
+      candidateData?.email ||
+      "student@example.com"
+
+    const projects =
+      candidateData?.projects && candidateData.projects.length > 0
+        ? candidateData.projects
+        : localData?.profile?.projects || []
+
+    const certificates =
+      candidateData?.certificates && candidateData.certificates.length > 0
+        ? candidateData.certificates
+        : localData?.profile?.certificates || []
+
+    const github =
+      candidateData?.github ||
+      localData?.profile?.github ||
+      remoteProf?.github ||
+      ""
+
+    const linkedin =
+      candidateData?.linkedin ||
+      localData?.profile?.linkedin ||
+      remoteProf?.linkedin ||
+      ""
+
+    return {
+      name,
+      email,
+      profile: {
+        skills,
+        interests: localData?.profile?.interests || remoteProf?.interests || [domain],
+        domain,
+        education,
+        university,
+        classYear: localData?.profile?.classYear || remoteProf?.class_year || "Class of 2026",
+        cgpa,
+        location,
+        stipendPreference: localData?.profile?.stipendPreference || remoteProf?.stipend_preference || 0,
+        workMode: localData?.profile?.workMode || remoteProf?.work_mode || "Remote",
+        github,
+        linkedin,
+        projects,
+        certificates,
       },
-      () => mockAuth.getProfile(),
-    )
+    }
   },
 
   updateProfile: async (profile: any) => {
