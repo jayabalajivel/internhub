@@ -55,15 +55,29 @@ const initMockDB = () => {
   if (!localStorage.getItem("internhub_mock_users")) {
     localStorage.setItem("internhub_mock_users", JSON.stringify([]))
   }
-  if (
-    !localStorage.getItem("internhub_mock_jobs") ||
-    JSON.parse(localStorage.getItem("internhub_mock_jobs") || "[]").length === 0
-  ) {
+  const currentJobsStr = localStorage.getItem("internhub_mock_jobs")
+  const needsJobRefresh =
+    !currentJobsStr ||
+    currentJobsStr === "[]" ||
+    currentJobsStr.includes("google.com/search") ||
+    currentJobsStr.includes("Verified Partner Portal")
+  if (needsJobRefresh) {
     localStorage.setItem(
       "internhub_mock_jobs",
       JSON.stringify(DEFAULT_CURATED_JOBS),
     )
   }
+  // Sanitize any previous hardcoded fake CGPA
+  try {
+    const candStr = localStorage.getItem("internhub_candidate_profile")
+    if (candStr && candStr.includes('"cgpa":"8.6/10"')) {
+      const parsed = JSON.parse(candStr)
+      if (parsed.cgpa === "8.6/10") {
+        parsed.cgpa = ""
+        localStorage.setItem("internhub_candidate_profile", JSON.stringify(parsed))
+      }
+    }
+  } catch {}
   if (!localStorage.getItem("internhub_mock_saved")) {
     localStorage.setItem("internhub_mock_saved", JSON.stringify([]))
   }
@@ -1771,22 +1785,106 @@ export const api = {
           new Set([...projectSkills, ...experienceSkills]),
         )
 
-        // Detect department / degree specialization from raw text
-        let detectedEducation = "B.Tech Computer Science & Engineering"
-        if (/mechanical|cad|solidworks|automobile|automotive|thermodynamics/i.test(rawText)) {
-          detectedEducation = "B.Tech Mechanical Engineering"
-        } else if (/electrical|electronics|eee|ece|vlsi|circuit|power systems/i.test(rawText)) {
-          detectedEducation = "B.Tech Electrical & Electronics Engineering"
-        } else if (/civil|structural|surveying|staad|revit|concrete/i.test(rawText)) {
-          detectedEducation = "B.Tech Civil Engineering"
-        } else if (/data science|data analyst|machine learning|artificial intelligence/i.test(rawText)) {
-          detectedEducation = "B.Tech Artificial Intelligence & Data Science"
+        // Authentic Discipline & Degree Specialization Detection
+        const isEEE =
+          /\b(?:electrical\s*(?:and|&)\s*electronics|electrical\s+engineering|\beee\b|power\s+systems|power\s+electronics|electric\s+machines|switchgear|high\s+voltage|plc\s+scada)\b/i.test(
+            rawText,
+          )
+        const isECE =
+          /\b(?:electronics\s*(?:and|&)\s*communication|electronics\s+engineering|\bece\b|embedded\s+systems|vlsi|microcontroller|digital\s+electronics|signals?\s*(?:and|&)?\s*systems?)\b/i.test(
+            rawText,
+          )
+        const isMech =
+          /\b(?:mechanical\s+engineering|mechanical|\bmech\b|thermodynamics|fluid\s+mechanics|cad\s*\/\s*cam|solidworks|autocad\s+mech|ansys|manufacturing\s+technology|strength\s+of\s+materials|kinematics)\b/i.test(
+            rawText,
+          )
+        const isCivil =
+          /\b(?:civil\s+engineering|civil|structural\s+engineering|staad\s*pro|revit|building\s+materials|surveying|concrete\s+technology|geotechnical|construction\s+technology)\b/i.test(
+            rawText,
+          )
+        const isDataAI =
+          /\b(?:artificial\s+intelligence|data\s+science|\bai\s*&\s*ds\b|\bai\s*&\s*ml\b|machine\s+learning|data\s+analytics)\b/i.test(
+            rawText,
+          )
+        const isIT =
+          /\b(?:information\s+technology|\binfotech\b|\bit\s+engineering\b)\b/i.test(
+            rawText,
+          )
+        const isCSE =
+          /\b(?:computer\s*science\s*(?:and|&)\s*engineering|computer\s+science|\bcse\b|computer\s+engineering|software\s+engineering)\b/i.test(
+            rawText,
+          )
+
+        let degreePrefix = "B.Tech"
+        if (/\b(?:B\.?E\.?|Bachelor\s+of\s+Engineering)\b/i.test(rawText)) {
+          degreePrefix = "B.E."
+        } else if (/\b(?:M\.?Tech\.?|Master\s+of\s+Technology)\b/i.test(rawText)) {
+          degreePrefix = "M.Tech"
+        } else if (/\b(?:M\.?E\.?|Master\s+of\s+Engineering)\b/i.test(rawText)) {
+          degreePrefix = "M.E."
+        } else if (/\b(?:BCA|Bachelor\s+of\s+Computer\s+Applications)\b/i.test(rawText)) {
+          degreePrefix = "BCA"
+        } else if (/\b(?:MCA|Master\s+of\s+Computer\s+Applications)\b/i.test(rawText)) {
+          degreePrefix = "MCA"
+        } else if (/\b(?:B\.?Sc\.?|Bachelor\s+of\s+Science)\b/i.test(rawText)) {
+          degreePrefix = "B.Sc"
+        } else if (/\b(?:Diploma|Polytechnic)\b/i.test(rawText)) {
+          degreePrefix = "Diploma"
         }
 
-        const isMech = /mechanical/i.test(rawText) || /mechanical/i.test(detectedEducation)
-        const isEEE = /electrical|eee|electronics/i.test(rawText) || /electrical/i.test(detectedEducation)
-        const isCivil = /civil/i.test(rawText) || /civil/i.test(detectedEducation)
-        const isDataAI = /data science|data analyst|machine learning|artificial intelligence/i.test(rawText)
+        let detectedEducation = ""
+        const eduLinesList = sections.education
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l.length > 5)
+
+        for (const line of eduLinesList) {
+          if (
+            /(?:Bachelor|Master|B\.?E|B\.?Tech|M\.?E|M\.?Tech|BCA|MCA|B\.?Sc|Diploma)/i.test(
+              line,
+            ) &&
+            /(?:Engineering|Technology|Science|Electrical|Electronics|Mechanical|Civil|Computer|Information|Applications|AI|Data)/i.test(
+              line,
+            )
+          ) {
+            const cleanLine = line
+              .replace(/^(?:degree|qualification|course|education)[:\-•*]\s*/i, "")
+              .replace(/\b(?:20[0-2][0-9]\s*[-–—]\s*20[0-2][0-9]|20[0-2][0-9])\b/g, "")
+              .replace(/\b(?:cgpa|gpa|percentage|marks)[:\s]+[0-9.]+/gi, "")
+              .replace(/[\t,;|]+/g, " ")
+              .replace(/\s{2,}/g, " ")
+              .trim()
+            if (cleanLine.length >= 8 && cleanLine.length <= 60) {
+              detectedEducation = cleanLine
+              break
+            }
+          }
+        }
+
+        if (!detectedEducation) {
+          if (degreePrefix === "BCA" || degreePrefix === "MCA") {
+            detectedEducation =
+              degreePrefix === "BCA"
+                ? "Bachelor of Computer Applications (BCA)"
+                : "Master of Computer Applications (MCA)"
+          } else if (isEEE) {
+            detectedEducation = `${degreePrefix} Electrical & Electronics Engineering`
+          } else if (isECE) {
+            detectedEducation = `${degreePrefix} Electronics & Communication Engineering`
+          } else if (isMech) {
+            detectedEducation = `${degreePrefix} Mechanical Engineering`
+          } else if (isCivil) {
+            detectedEducation = `${degreePrefix} Civil Engineering`
+          } else if (isDataAI) {
+            detectedEducation = `${degreePrefix} Artificial Intelligence & Data Science`
+          } else if (isIT) {
+            detectedEducation = `${degreePrefix} Information Technology`
+          } else if (isCSE) {
+            detectedEducation = `${degreePrefix} Computer Science & Engineering`
+          } else {
+            detectedEducation = `${degreePrefix} Engineering`
+          }
+        }
 
         // 4. ML / NLP Multi-Department Role Classification
         const rolesMap: Record<string, { core: string[]; secondary: string[] }> =
@@ -2070,32 +2168,42 @@ export const api = {
             }
           }
         }
+        // If no university was identified in the resume text, leave blank to maintain data integrity
         if (!detectedUniversity) {
-          detectedUniversity = "College of Engineering & Technology"
+          detectedUniversity = ""
         }
 
-        // 4. Marks / Percentage / CGPA
+        // 4. Marks / Percentage / CGPA (Strict Authentic Extraction — No Fabricated Scores)
         let detectedCgpa = ""
         const cgpaPatterns = [
-          /(?:cgpa|gpa|marks|percentage|aggregate)[\s:=]+([0-9]{1,2}(?:\.[0-9]{1,2})?(?:\s*\/\s*10|\s*%\s*|\s*out\s+of\s+10)?)/i,
-          /\b([0-9]\.[0-9]{1,2})\s*(?:\/\s*10|\s*cgpa|\s*gpa)\b/i,
+          // Explicit label: CGPA: 8.45, CGPA - 8.4/10, GPA: 3.8/4, CGPA = 8.5
+          /(?:cgpa|gpa|aggregate|cumulative\s+grade|grade\s+point)[\s:=–—\-]+([0-9]{1,2}(?:\.[0-9]{1,2})?(?:\s*\/\s*(?:10|4)|\s*%)?)/i,
+          // Suffix label: 8.45 CGPA, 8.4 / 10 CGPA
+          /\b([0-9]\.[0-9]{1,2})\s*(?:\/\s*10|\/\s*4)?\s*(?:cgpa|gpa)\b/i,
+          // Percentage: Percentage: 85%, Marks: 82.5%
+          /(?:percentage|marks|aggregate)[\s:=–—\-]+([5-9][0-9](?:\.[0-9]{1,2})?\s*%?)/i,
+          // Standalone percentage: 84.5%
           /\b([6-9][0-9](?:\.[0-9]{1,2})?)\s*%/i,
-          /(?:cumulative\s+grade|grade\s+point)[\s:=]+([0-9]{1,2}(?:\.[0-9]{1,2})?)/i,
+          // Fraction format: 8.4/10 or 3.8/4
+          /\b([0-9]\.[0-9]{1,2})\s*\/\s*(?:10|4)\b/i,
+          // Tabular education rows (e.g., "B.E ... 2024 ... 8.45")
+          /(?:B\.?E\.?|B\.?Tech\.?|HSC|SSLC|12th|10th)[^\n\r]*?\b([0-9]\.[0-9]{1,2})\b/i,
         ]
         for (const p of cgpaPatterns) {
           const m = rawText.match(p)
           if (m && m[1]) {
-            let val = m[1].trim()
+            let val = m[1].replace(/[\s\n]+/g, "").trim()
             if (!val.includes("/") && !val.includes("%")) {
               const num = parseFloat(val)
-              if (num <= 10) val = `${val}/10`
-              else if (num <= 100) val = `${val}%`
+              if (num <= 10 && num >= 4.0) val = `${num}/10`
+              else if (num <= 4.0 && num >= 1.0) val = `${num}/4.0`
+              else if (num <= 100 && num >= 50) val = `${num}%`
             }
             detectedCgpa = val
             break
           }
         }
-        if (!detectedCgpa) detectedCgpa = "8.6/10"
+        // Strict Authenticity: If not found in resume, leave empty string (""). Never inject fake scores!
 
         // 5. Place / Location / City
         let detectedLocation = ""
@@ -2308,35 +2416,39 @@ export const api = {
           Math.max(40, foundSkills.length * 9 + strongSkills.length * 5),
         )
 
-        // Refine department / degree specialization from raw text & predicted role
-        if (
-          /mechanical|cad|solidworks|automobile|automotive|thermodynamics/i.test(
-            rawText,
-          ) ||
-          primaryRole.includes("Mechanical") ||
-          primaryRole.includes("Thermal") ||
-          primaryRole.includes("Manufacturing")
-        ) {
-          detectedEducation = "B.Tech Mechanical Engineering"
-        } else if (
-          /electrical|electronics|eee|ece|vlsi|circuit|power systems/i.test(
-            rawText,
-          ) ||
-          primaryRole.includes("Electrical") ||
-          primaryRole.includes("EEE")
-        ) {
-          detectedEducation = "B.Tech Electrical & Electronics Engineering"
-        } else if (
-          /civil|structural|surveying|staad|revit|concrete/i.test(rawText) ||
-          primaryRole.includes("Civil")
-        ) {
-          detectedEducation = "B.Tech Civil Engineering"
-        } else if (
-          /data science|data analyst|machine learning|artificial intelligence/i.test(
-            rawText,
-          )
-        ) {
-          detectedEducation = "B.Tech Artificial Intelligence & Data Science"
+        // If still unresolved, fallback to authentic domain-based degree description
+        if (!detectedEducation) {
+          if (
+            /mechanical|cad|solidworks|automobile|automotive|thermodynamics/i.test(
+              rawText,
+            ) ||
+            primaryRole.includes("Mechanical") ||
+            primaryRole.includes("Thermal") ||
+            primaryRole.includes("Manufacturing")
+          ) {
+            detectedEducation = "B.E. Mechanical Engineering"
+          } else if (
+            /electrical|electronics|eee|ece|vlsi|circuit|power systems/i.test(
+              rawText,
+            ) ||
+            primaryRole.includes("Electrical") ||
+            primaryRole.includes("EEE")
+          ) {
+            detectedEducation = "B.E. Electrical & Electronics Engineering"
+          } else if (
+            /civil|structural|surveying|staad|revit|concrete/i.test(rawText) ||
+            primaryRole.includes("Civil")
+          ) {
+            detectedEducation = "B.E. Civil Engineering"
+          } else if (
+            /data science|data analyst|machine learning|artificial intelligence/i.test(
+              rawText,
+            )
+          ) {
+            detectedEducation = "B.Tech Artificial Intelligence & Data Science"
+          } else {
+            detectedEducation = "Engineering Graduate"
+          }
         }
 
         const candidateProfileData = {

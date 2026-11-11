@@ -3,6 +3,8 @@ import {
   extractJobSkills,
   normalizeSkill,
   getSkillRegex,
+  matchesDiscipline,
+  getSafeApplyUrl,
   type CandidateProfileData,
   type LiveJob,
 } from "../jobServices.ts"
@@ -424,6 +426,102 @@ console.log("\nSuite 11: Full Stack Candidate Alignment on Full Stack Opportunit
   assert(
     ranked[0].matchedSkills.length >= 3,
     `Matched skills must be at least 3, got ${ranked[0].matchedSkills.length} (${ranked[0].matchedSkills.join(", ")})`,
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Test Suite 12: Engineering Discipline Filtering (EEE, ECE, Mech, Civil, Software)
+// -----------------------------------------------------------------------------
+console.log("\nSuite 12: Engineering Discipline Filtering")
+{
+  const eeeJob = createDummyJob(
+    "eee_1",
+    "Electrical & Industrial Automation Intern (EEE)",
+    "Schneider Electric hiring. Skills: MATLAB, Simulink, Power Systems, PLC, switchgear.",
+  )
+  const softwareJob = createDummyJob(
+    "sw_1",
+    "Software Engineering Intern - Full Stack",
+    "React, Node.js, SQL, TypeScript.",
+  )
+  const mechJob = createDummyJob(
+    "mech_1",
+    "Mechanical CAD & Design Engineering Intern",
+    "SolidWorks, AutoCAD, GD&T, FEA analysis.",
+  )
+  const civilJob = createDummyJob(
+    "civil_1",
+    "Civil & Structural Engineering Intern",
+    "STAAD.Pro, AutoCAD, Revit BIM, RCC concrete design.",
+  )
+
+  assert(
+    matchesDiscipline(eeeJob, "eee") === true,
+    "Electrical job correctly matches 'eee' category",
+  )
+  assert(
+    matchesDiscipline(softwareJob, "eee") === false,
+    "Software job must NOT match 'eee' category",
+  )
+  assert(
+    matchesDiscipline(mechJob, "mechanical") === true,
+    "Mechanical job correctly matches 'mechanical' category",
+  )
+  assert(
+    matchesDiscipline(softwareJob, "mechanical") === false,
+    "Software job must NOT match 'mechanical' category",
+  )
+  assert(
+    matchesDiscipline(civilJob, "civil") === true,
+    "Civil job correctly matches 'civil' category",
+  )
+  assert(
+    matchesDiscipline(eeeJob, "all") === true,
+    "'all' category accepts all disciplines",
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Test Suite 13: Direct Application Link Safety & Authenticity
+// -----------------------------------------------------------------------------
+console.log("\nSuite 13: Direct Application Link Safety & Authenticity")
+{
+  const jobWithDirectUrl = {
+    company: "Bosch India",
+    companyWebsite: "bosch.in",
+    applyLink: "https://www.bosch.in/careers/",
+  }
+  const jobWithGoogleSearch = {
+    company: "Texas Instruments",
+    companyWebsite: "ti.com",
+    applyLink: "https://www.google.com/search?q=Texas+Instruments+Bangalore+careers",
+  }
+  const jobWithoutUrl = {
+    company: "Schneider Electric",
+    companyWebsite: "se.com",
+    applyLink: "",
+  }
+
+  const safe1 = getSafeApplyUrl(jobWithDirectUrl)
+  assert(
+    safe1 === "https://www.bosch.in/careers/",
+    "Preserves direct official careers URL",
+  )
+
+  const safe2 = getSafeApplyUrl(jobWithGoogleSearch)
+  assert(
+    !safe2.includes("google.com/search"),
+    "Rejects google.com/search and falls back to authentic company portal",
+  )
+  assert(
+    safe2 === "https://ti.com/careers",
+    "Correctly resolves company website careers portal for google search links",
+  )
+
+  const safe3 = getSafeApplyUrl(jobWithoutUrl)
+  assert(
+    safe3 === "https://se.com/careers",
+    "Fallback resolves to company careers portal instead of Google query",
   )
 }
 

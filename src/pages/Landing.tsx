@@ -85,7 +85,7 @@ export default function Landing({ onNavigate }: LandingProps) {
           
           <div className="hidden md:flex items-center gap-8">
             <button className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Find Jobs & Internships</button>
-            <button className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">AI Resume Builder</button>
+            <button className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">AI Resume Analyze</button>
             <button className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">Career Advice</button>
           </div>
 

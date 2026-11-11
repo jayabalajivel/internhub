@@ -132,7 +132,7 @@ export default function App() {
   const pageTitles: Record<string, string> = {
     dashboard: "Overview",
     internships: "Find Jobs & Internships",
-    resume: "Resume Builder",
+    resume: "Resume Analyze",
     skills: "Skill Gap & Roadmap",
     tracker: "Application Tracker",
     saved: "Saved Jobs",

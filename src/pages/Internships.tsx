@@ -19,7 +19,9 @@ import {
   getSafeApplyUrl,
   matchLocation,
   matchAndRankJobs,
+  matchesDiscipline,
 } from "../jobServices"
+import { DEFAULT_CURATED_JOBS } from "../defaultJobs"
 
 interface Props {
   onNavigate: (p: string) => void
@@ -122,62 +124,94 @@ export default function Internships({ onNavigate }: Props) {
     try {
       let fetched: any[] = []
       const activeCat = INTERNSHIP_CATEGORIES.find((c) => c.id === selectedCategory)
-      const catQuery = activeCat && activeCat.id !== "all" ? activeCat.query : ""
-      const combinedSearch = [catQuery, debouncedSearch].filter(Boolean).join(" ").trim()
+      const hasSpecificCategory = Boolean(selectedCategory && selectedCategory !== "all")
 
-      if (!combinedSearch) {
-        fetched = await api.getRecommendations(country, stateCity, workMode)
+      let rawList: any[] = []
+      if (!debouncedSearch && !hasSpecificCategory) {
+        rawList = await api.getRecommendations(country, stateCity, workMode)
       } else {
-        const rawList = await api.getInternships(
-          combinedSearch,
+        const queryTerm = [
+          hasSpecificCategory ? activeCat?.id : "",
+          debouncedSearch,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim()
+
+        rawList = await api.getInternships(
+          queryTerm,
           stateCity,
           workMode === "Remote",
           country,
           workMode,
         )
-        const cachedProfileStr = localStorage.getItem(
-          "internhub_candidate_profile",
-        )
-        let cProf: any = {}
-        if (cachedProfileStr) {
-          try {
-            cProf = JSON.parse(cachedProfileStr)
-          } catch (e) {}
-        }
-        let skills = cProf.extracted_skills
-        let pRole = cProf.primary_role
-        if (!skills || skills.length === 0) {
-          const prof = await api.getProfile()
-          skills = prof.profile?.skills || []
-          pRole = pRole || prof.profile?.domain || ""
-        }
-        const ranked = matchAndRankJobs(
-          {
-            extracted_skills: skills || [],
-            strong_skills: cProf.strong_skills || skills || [],
-            project_skills: cProf.project_skills || [],
-            experience_skills: cProf.experience_skills || [],
-            primary_role: pRole || (activeCat && activeCat.id !== "all" ? activeCat.label : ""),
-            predicted_roles: cProf.predicted_roles || [],
-            preferred_work_mode: workMode,
-            preferred_location: stateCity || debouncedSearch,
-          },
-          rawList,
-        )
+      }
 
-        // Filter by user search query if entered
-        if (debouncedSearch.trim()) {
-          const q = debouncedSearch.toLowerCase().trim()
-          fetched = ranked.filter(
-            (job: any) =>
-              job.title.toLowerCase().includes(q) ||
-              job.company.toLowerCase().includes(q) ||
-              job.description.toLowerCase().includes(q) ||
-              matchLocation(job.location, q),
-          )
-        } else {
-          fetched = ranked
-        }
+      // Strict Engineering Discipline Filtering
+      if (hasSpecificCategory && selectedCategory) {
+        rawList = rawList.filter((j) => matchesDiscipline(j, selectedCategory))
+        // Supplement with verified curated opportunities for this discipline
+        const curatedMatching = DEFAULT_CURATED_JOBS.filter((j) =>
+          matchesDiscipline(j, selectedCategory),
+        )
+        const existingIds = new Set(rawList.map((j) => j.id || j._id))
+        curatedMatching.forEach((j) => {
+          if (!existingIds.has(j.id || j._id)) rawList.push(j)
+        })
+      }
+
+      // Location / Country filter if user selected specific country or city
+      if (country && country !== "Worldwide" && country !== "All") {
+        rawList = rawList.filter((j) => matchLocation(j.location, country))
+      }
+      if (stateCity && stateCity.trim().length > 0) {
+        rawList = rawList.filter((j) => matchLocation(j.location, stateCity))
+      }
+
+      const cachedProfileStr = localStorage.getItem(
+        "internhub_candidate_profile",
+      )
+      let cProf: any = {}
+      if (cachedProfileStr) {
+        try {
+          cProf = JSON.parse(cachedProfileStr)
+        } catch (e) {}
+      }
+      let skills = cProf.extracted_skills
+      let pRole = cProf.primary_role
+      if (!skills || skills.length === 0) {
+        const prof = await api.getProfile()
+        skills = prof.profile?.skills || []
+        pRole = pRole || prof.profile?.domain || ""
+      }
+      const ranked = matchAndRankJobs(
+        {
+          extracted_skills: skills || [],
+          strong_skills: cProf.strong_skills || skills || [],
+          project_skills: cProf.project_skills || [],
+          experience_skills: cProf.experience_skills || [],
+          primary_role: hasSpecificCategory
+            ? activeCat?.label || ""
+            : pRole || "",
+          predicted_roles: cProf.predicted_roles || [],
+          preferred_work_mode: workMode,
+          preferred_location: stateCity || debouncedSearch,
+        },
+        rawList,
+      )
+
+      // Filter by user search query if entered
+      if (debouncedSearch.trim()) {
+        const q = debouncedSearch.toLowerCase().trim()
+        fetched = ranked.filter(
+          (job: any) =>
+            job.title.toLowerCase().includes(q) ||
+            job.company.toLowerCase().includes(q) ||
+            job.description.toLowerCase().includes(q) ||
+            matchLocation(job.location, q),
+        )
+      } else {
+        fetched = ranked
       }
       setJobs(fetched || [])
 

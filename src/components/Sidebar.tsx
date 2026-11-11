@@ -29,7 +29,7 @@ interface SidebarProps {
 const navItems = [
   { id: "dashboard", label: "Overview", Icon: HomeIcon },
   { id: "internships", label: "Find Jobs & Internships", Icon: BriefcaseIcon },
-  { id: "resume", label: "Resume Builder", Icon: FileTextIcon },
+  { id: "resume", label: "Resume Analyze", Icon: FileTextIcon },
   { id: "skills", label: "Skill Gap Analysis", Icon: ZapIcon },
   { id: "tracker", label: "Application Tracker", Icon: KanbanIcon },
   { id: "saved", label: "Saved Jobs", Icon: BookmarkIcon },

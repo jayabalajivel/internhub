@@ -1295,7 +1295,7 @@ export function matchLocation(jobLoc: string, targetLoc: string): boolean {
   return false
 }
 
-// Safe Application URL generator (prevents broken redirects, empty tabs, and 404 errors)
+// Safe Application URL generator (prevents broken redirects, empty tabs, and Google search queries)
 export function getSafeApplyUrl(job: any): string {
   if (job?.applyLink && typeof job.applyLink === "string") {
     const raw = job.applyLink.trim()
@@ -1304,6 +1304,7 @@ export function getSafeApplyUrl(job: any): string {
       !raw.includes("about:blank") &&
       !raw.includes("localhost") &&
       !raw.includes("example.com") &&
+      !raw.includes("google.com/search") &&
       raw !== "https://jooble.org" &&
       raw !== "https://jooble.org/" &&
       raw !== "https://adzuna.com" &&
@@ -1317,9 +1318,18 @@ export function getSafeApplyUrl(job: any): string {
     }
   }
 
-  const company = (job?.company || "Company").replace(/[^\w\s]/g, " ").trim()
-  const title = (job?.title || "Internship").replace(/[^\w\s]/g, " ").trim()
-  return `https://www.google.com/search?q=${encodeURIComponent(`${company} ${title} internship apply careers`)}`
+  // Authentic Direct Company Careers Portal Fallback
+  if (job?.companyWebsite && typeof job.companyWebsite === "string") {
+    const cleanSite = job.companyWebsite
+      .replace(/^https?:\/\//, "")
+      .replace(/\/+$/, "")
+    return `https://${cleanSite}/careers`
+  }
+
+  const cleanCompany = (job?.company || "company")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+  return `https://www.${cleanCompany}.com/careers`
 }
 
 // Extract Skills and Partition Required vs Preferred from Job Listing
@@ -1341,6 +1351,71 @@ export const ROLE_IMPLIED_SKILLS: Record<string, string[]> = {
   "ai": ["Python", "Machine Learning", "Deep Learning", "TensorFlow"],
   "cloud": ["AWS", "Docker", "Kubernetes", "Linux", "CI/CD"],
   "devops": ["Docker", "Kubernetes", "CI/CD", "Linux", "AWS"],
+}
+
+// Engineering Discipline Classifier & Validator
+export function matchesDiscipline(job: any, categoryId: string): boolean {
+  if (!categoryId || categoryId === "all") return true
+  const text = `${job?.title || ""} ${job?.description || ""} ${job?.company || ""}`.toLowerCase()
+
+  switch (categoryId.toLowerCase()) {
+    case "eee":
+      return (
+        /electrical|power system|power electronics|plc|scada|switchboard|switchgear|substation|high voltage|electric vehicle|bms|motor drive|transformer|grid|schneider|abb|tata power/i.test(
+          text,
+        ) ||
+        /\b(?:eee|ee)\b/i.test(text) ||
+        /automation intern/i.test(text)
+      )
+
+    case "ece":
+      return (
+        /electronics|embedded|firmware|vlsi|verilog|vhdl|pcb|microcontroller|arm cortex|iot|fpga|telecom|rf|analog|circuit|signal processing|hardware|qualcomm|texas instruments|intel/i.test(
+          text,
+        ) || /\b(?:ece|ec)\b/i.test(text)
+      )
+
+    case "mechanical":
+      return (
+        /mechanical|cad|solidworks|catia|autocad|ansys|thermodynamics|fluid mechanics|cfd|fea|manufacturing|automotive|automobile|robotics|hvac|gd&t|machining|ather|tvs|tata motors|siemens healthineers|powertrain|chassis/i.test(
+          text,
+        ) || /\b(?:mech)\b/i.test(text)
+      )
+
+    case "civil":
+      return (
+        /civil|structural|construction|staad|revit|bim|surveying|concrete|geotechnical|transportation|site engineer|autocad civil|estimation|infrastructure|l&t|tata projects|afcons/i.test(
+          text,
+        ) || /\b(?:civil)\b/i.test(text)
+      )
+
+    case "cloud":
+      return (
+        /cloud|devops|aws|azure|gcp|kubernetes|docker|terraform|ci\/cd|linux|sre|helm|infrastructure engineer|amazon web services/i.test(
+          text,
+        )
+      )
+
+    case "ai":
+      return (
+        /data science|data scientist|machine learning|deep learning|artificial intelligence|ai engineer|nlp|computer vision|pytorch|tensorflow|pandas|data analyst|swiggy|fractal/i.test(
+          text,
+        ) || /\b(?:ai|ml)\b/i.test(text)
+      )
+
+    case "software":
+      return (
+        /software|developer|full stack|frontend|backend|web|react|node|java|python|javascript|typescript|c\+\+|golang|mobile|android|ios|flutter|api engineering/i.test(
+          text,
+        ) &&
+        !/mechanical|civil construction|civil structural|substation|high voltage|switchgear/i.test(
+          job?.title || "",
+        )
+      )
+
+    default:
+      return true
+  }
 }
 
 export function extractJobSkills(title: string, description: string): {
