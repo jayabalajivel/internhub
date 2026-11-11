@@ -4,6 +4,7 @@ import {
   BrainIcon, TrendUpIcon, RocketIcon, AwardIcon, SearchIcon, MapPinIcon, BriefcaseIcon, CheckIcon
 } from '../components/Icons'
 import logo from '../assets/logo.png'
+import { api } from '../api'
 
 type Page = 'landing' | 'auth' | 'dashboard' | string
 
@@ -39,13 +40,37 @@ export default function Landing({ onNavigate }: LandingProps) {
   const [scrolled, setScrolled] = useState(false)
   const [searchRole, setSearchRole] = useState('')
   const [searchLocation, setSearchLocation] = useState('')
+  const [liveApps, setLiveApps] = useState<any[]>([])
+  const [appCounts, setAppCounts] = useState({ applied: 0, interview: 0, offer: 0 })
 
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20)
     }
     window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
+
+    const loadApps = () => {
+      api.getApplications().then((apps) => {
+        const records = apps || []
+        setLiveApps(records)
+        const counts = { applied: 0, interview: 0, offer: 0 }
+        records.forEach((a: any) => {
+          const s = (a.status || 'Applied').toLowerCase()
+          if (s === 'applied') counts.applied++
+          else if (s.includes('interview')) counts.interview++
+          else if (s.includes('offer') || s.includes('select')) counts.offer++
+        })
+        setAppCounts(counts)
+      }).catch(() => {})
+    }
+
+    loadApps()
+    window.addEventListener('internhub_applications_updated', loadApps)
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('internhub_applications_updated', loadApps)
+    }
   }, [])
 
   return (
@@ -248,49 +273,92 @@ export default function Landing({ onNavigate }: LandingProps) {
                 </div>
                 <div className="mx-auto bg-white border border-slate-200 rounded-md py-1 px-24 text-[10px] text-slate-400 font-medium">internhub.com/tracker</div>
               </div>
-              {/* Fake App Body */}
+              {/* Live App Body */}
               <div className="p-6 bg-slate-50">
                 <div className="flex justify-between items-center mb-6">
-                  <h4 className="font-bold text-slate-800">Applications</h4>
-                  <button className="bg-indigo-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">+ Add New</button>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-slate-800">Live Application Tracker</h4>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  </div>
+                  <button 
+                    onClick={() => onNavigate('tracker')} 
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Manage Board →
+                  </button>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
-                  {/* Column 1 */}
+                  {/* Column 1: Applied */}
                   <div className="space-y-3">
-                    <div className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">Applied <span className="bg-slate-200 text-slate-700 px-1.5 rounded-sm">2</span></div>
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-6 h-6 rounded bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700">G</div>
-                        <span className="text-xs font-bold text-slate-700">Google</span>
-                      </div>
-                      <div className="text-xs font-medium text-slate-800 mb-1">Frontend Engineer Intern</div>
-                      <div className="text-[10px] text-slate-500">Applied 2d ago</div>
+                    <div className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+                      Applied <span className="bg-slate-200 text-slate-700 px-1.5 rounded-sm">{appCounts.applied}</span>
                     </div>
+                    {liveApps.filter((a) => (a.status || 'Applied').toLowerCase() === 'applied').slice(0, 2).map((app, i) => (
+                      <div key={app.id || i} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className="w-6 h-6 rounded bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700">
+                            {(app.company || app.jobTitle || 'J').charAt(0)}
+                          </div>
+                          <span className="text-xs font-bold text-slate-700 truncate">{app.company || 'Company'}</span>
+                        </div>
+                        <div className="text-xs font-medium text-slate-800 mb-1 truncate">{app.jobTitle || 'Internship'}</div>
+                        <div className="text-[10px] text-slate-400">Tracked {app.appliedDate ? new Date(app.appliedDate).toLocaleDateString() : 'Recently'}</div>
+                      </div>
+                    ))}
+                    {appCounts.applied === 0 && (
+                      <div className="border border-dashed border-slate-200 rounded-xl p-3 text-center text-[11px] text-slate-400">
+                        No applications yet
+                      </div>
+                    )}
                   </div>
-                  {/* Column 2 */}
+
+                  {/* Column 2: Interview */}
                   <div className="space-y-3">
-                    <div className="text-xs font-bold text-indigo-500 uppercase flex items-center gap-2">Interview <span className="bg-indigo-100 text-indigo-700 px-1.5 rounded-sm">1</span></div>
-                    <div className="bg-white p-3 rounded-xl border border-indigo-200 shadow-sm shadow-indigo-100 relative">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 rounded-l-xl"></div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-6 h-6 rounded bg-slate-900 flex items-center justify-center text-[10px] font-bold text-white">S</div>
-                        <span className="text-xs font-bold text-slate-700">Stripe</span>
-                      </div>
-                      <div className="text-xs font-medium text-slate-800 mb-1">Software Intern</div>
-                      <div className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded inline-block">Tech Screen • Tomorrow</div>
+                    <div className="text-xs font-bold text-indigo-500 uppercase flex items-center gap-2">
+                      Interview <span className="bg-indigo-100 text-indigo-700 px-1.5 rounded-sm">{appCounts.interview}</span>
                     </div>
+                    {liveApps.filter((a) => (a.status || '').toLowerCase().includes('interview')).slice(0, 2).map((app, i) => (
+                      <div key={app.id || i} className="bg-white p-3 rounded-xl border border-indigo-200 shadow-sm shadow-indigo-100 relative">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 rounded-l-xl"></div>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className="w-6 h-6 rounded bg-indigo-900 flex items-center justify-center text-[10px] font-bold text-white">
+                            {(app.company || 'I').charAt(0)}
+                          </div>
+                          <span className="text-xs font-bold text-slate-700 truncate">{app.company || 'Company'}</span>
+                        </div>
+                        <div className="text-xs font-medium text-slate-800 mb-1 truncate">{app.jobTitle || 'Internship'}</div>
+                        <div className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded inline-block">Active Round</div>
+                      </div>
+                    ))}
+                    {appCounts.interview === 0 && (
+                      <div className="border border-dashed border-indigo-100 rounded-xl p-3 text-center text-[11px] text-indigo-400/80 bg-indigo-50/30">
+                        Drag here when invited
+                      </div>
+                    )}
                   </div>
-                  {/* Column 3 */}
+
+                  {/* Column 3: Offer */}
                   <div className="space-y-3">
-                    <div className="text-xs font-bold text-emerald-500 uppercase flex items-center gap-2">Offer <span className="bg-emerald-100 text-emerald-700 px-1.5 rounded-sm">1</span></div>
-                    <div className="bg-white p-3 rounded-xl border border-emerald-200 shadow-sm">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-6 h-6 rounded bg-emerald-100 flex items-center justify-center text-[10px] font-bold text-emerald-700">M</div>
-                        <span className="text-xs font-bold text-slate-700">Microsoft</span>
-                      </div>
-                      <div className="text-xs font-medium text-slate-800 mb-1">Data Science Intern</div>
-                      <div className="text-[10px] text-emerald-600 font-bold">₹80k/mo</div>
+                    <div className="text-xs font-bold text-emerald-500 uppercase flex items-center gap-2">
+                      Offer <span className="bg-emerald-100 text-emerald-700 px-1.5 rounded-sm">{appCounts.offer}</span>
                     </div>
+                    {liveApps.filter((a) => (a.status || '').toLowerCase().includes('offer') || (a.status || '').toLowerCase().includes('select')).slice(0, 2).map((app, i) => (
+                      <div key={app.id || i} className="bg-white p-3 rounded-xl border border-emerald-200 shadow-sm">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className="w-6 h-6 rounded bg-emerald-100 flex items-center justify-center text-[10px] font-bold text-emerald-700">
+                            {(app.company || 'O').charAt(0)}
+                          </div>
+                          <span className="text-xs font-bold text-slate-700 truncate">{app.company || 'Company'}</span>
+                        </div>
+                        <div className="text-xs font-medium text-slate-800 mb-1 truncate">{app.jobTitle || 'Internship'}</div>
+                        <div className="text-[10px] text-emerald-600 font-bold">Selected 🎉</div>
+                      </div>
+                    ))}
+                    {appCounts.offer === 0 && (
+                      <div className="border border-dashed border-emerald-100 rounded-xl p-3 text-center text-[11px] text-emerald-500/80 bg-emerald-50/30">
+                        Offers appear here
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

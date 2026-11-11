@@ -82,10 +82,10 @@ export default function Dashboard({ onNavigate }: Props) {
         setSkills(userSkills)
 
         const apps = await api.getApplications()
-        setApplications(apps)
+        setApplications(apps || [])
 
         const counts = { applied: 0, interviewing: 0, offered: 0, rejected: 0 }
-        apps.forEach((a: any) => {
+        ;(apps || []).forEach((a: any) => {
           const s = (a.status || "Applied").toLowerCase()
           if (s === "applied") counts.applied++
           else if (s === "interviewing" || s === "interview")
@@ -97,30 +97,45 @@ export default function Dashboard({ onNavigate }: Props) {
         setStatusCounts(counts)
 
         const saved = await api.getSavedJobs()
-        setSavedJobsCount(saved.length)
+        setSavedJobsCount((saved || []).length)
 
-        let avgScore = 0
+        // Show dashboard immediately without waiting for recommendation remote queries
+        setLoading(false)
+
+        // Fetch top recommendations asynchronously
         if (userSkills.length > 0) {
-          const recommended = await api.getRecommendations()
-          const top3 = recommended.slice(0, 3)
-          setTopMatches(top3)
-          if (top3.length > 0) {
-            avgScore = Math.round(
-              top3.reduce((sum, j) => sum + (j.matchPercentage || 0), 0) /
-                top3.length,
-            )
+          try {
+            const recommended = await api.getRecommendations()
+            const top3 = (recommended || []).slice(0, 3)
+            setTopMatches(top3)
+            if (top3.length > 0) {
+              const avgScore = Math.round(
+                top3.reduce((sum, j) => sum + (j.matchPercentage || 0), 0) /
+                  top3.length,
+              )
+              setAiMatchScore(avgScore)
+            }
+          } catch (recErr) {
+            console.warn("Recommendations load error:", recErr)
           }
         } else {
           setTopMatches([])
+          setAiMatchScore(0)
         }
-        setAiMatchScore(avgScore)
       } catch (err) {
-        console.error(err)
+        console.error("Dashboard data load error:", err)
       } finally {
         setLoading(false)
       }
     }
     fetchData()
+    const handleUpdate = () => fetchData()
+    window.addEventListener("internhub_profile_updated", handleUpdate)
+    window.addEventListener("internhub_applications_updated", handleUpdate)
+    return () => {
+      window.removeEventListener("internhub_profile_updated", handleUpdate)
+      window.removeEventListener("internhub_applications_updated", handleUpdate)
+    }
   }, [])
 
   const [aiMatchScore, setAiMatchScore] = useState(0)
@@ -275,10 +290,10 @@ export default function Dashboard({ onNavigate }: Props) {
               <p className="text-sm text-slate-500">Live tracking status across your active applications</p>
             </div>
             <button
-              onClick={() => onNavigate("applications")}
-              className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 font-semibold py-1.5 px-3 rounded-lg text-xs transition-colors flex items-center gap-1.5"
+              onClick={() => onNavigate("tracker")}
+              className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 font-semibold py-1.5 px-3 rounded-lg text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
             >
-              Kanban Board <ArrowRightIcon size={12} />
+              Application Tracker <ArrowRightIcon size={12} />
             </button>
           </div>
 

@@ -1,7 +1,9 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js"
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ""
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ""
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim()
+// Clean trailing slashes and /rest/v1 suffixes if mistakenly entered
+const supabaseUrl = rawUrl.replace(/\/rest\/v1\/?$/i, "").replace(/\/+$/, "")
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim()
 
 export const isSupabaseConfigured = (): boolean => {
   return (
@@ -14,5 +16,10 @@ export const isSupabaseConfigured = (): boolean => {
 }
 
 export const supabase: SupabaseClient | null = isSupabaseConfigured()
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
   : null

@@ -30,21 +30,49 @@ TfidfVectorizer = None
 cosine_similarity = None
 
 # ==============================================================================
-# 1. NON-RESUME & IRRELEVANT DOCUMENT PATTERNS
+# 1. NON-RESUME & MULTI-CLASS IRRELEVANT DOCUMENT PATTERNS
 # ==============================================================================
-IRRELEVANT_PATTERNS = [
+# Financial Bills, College Fees, Invoices & Grocery/Store Receipts
+FINANCIAL_BILL_PATTERNS = [
     r'\btuition\s+fee\b', r'\bcollege\s+fee\b', r'\bfee\s+receipt\b', r'\bpayment\s+receipt\b',
     r'\bfee\s+structure\b', r'\bhostel\s+fee\b', r'\binvoice\b', r'\bbill\s+amount\b',
     r'\btransaction\s+id\b', r'\bamount\s+paid\b', r'\bdue\s+date\b', r'\bsemester\s+fee\b',
     r'\bbank\s+challan\b', r'\bbalance\s+due\b', r'\bsubtotal\b', r'\btax\s+invoice\b',
-    r'\btotal\s+amount\b', r'\breceipt\s+no\b', r'\bpayment\s+details\b'
+    r'\btotal\s+amount\b', r'\breceipt\s+no\b', r'\bpayment\s+details\b',
+    # Grocery, Supermarket & Retail Store Receipt Patterns
+    r'\bgrocery\b', r'\bsupermarket\b', r'\bstore\b', r'\bmart\b', r'\bcashier\b',
+    r'\breceipt\b', r'\bcash\s+bill\b', r'\bqty\b', r'\bquantity\b', r'\bmrp\b',
+    r'\bitem\s+name\b', r'\bgst\b', r'\bgstin\b', r'\bvat\b', r'\bdiscount\b',
+    r'\bchange\s+due\b', r'\bcash\b', r'\bcard\b', r'\bpos\s+machine\b', r'\bnet\s+amount\b',
+    r'\bgrand\s+total\b', r'\bprice\b', r'\bitems?\s+count\b', r'\bpcs\b'
 ]
 
+# Academic Research / Journal Publications
+RESEARCH_PAPER_PATTERNS = [
+    r'\babstract\b', r'\bintroduction\b', r'\bieee\b', r'\breferences\b', r'\bdoi\s*:\b',
+    r'\bissn\b', r'\bisbn\b', r'\bvol\.\s*\d+', r'\bissue\s*\d+', r'\bindex\s+terms\b',
+    r'\bkeywords\s*:\b', r'\bproceedings\s+of\b', r'\bconference\b', r'\bjournal\b',
+    r'\bmethodology\b', r'\bliterature\s+review\b', r'\bconclusion\b', r'\backnowledgment\b',
+    r'\bauthors?\b', r'\barxiv\b'
+]
+
+# Recruiter Job Descriptions / Vacancy Notices
+JOB_DESCRIPTION_PATTERNS = [
+    r'\bjob\s+description\b', r'\babout\s+the\s+role\b', r'\bwe\s+are\s+hiring\b',
+    r'\bwe\s+are\s+looking\s+for\b', r'\brole\s+overview\b', r'\bresponsibilities\b',
+    r'\bkey\s+responsibilities\b', r'\bwhat\s+you\'ll\s+do\b', r'\bwhat\s+you\s+will\s+do\b',
+    r'\bwho\s+you\s+are\b', r'\bjob\s+requirements\b', r'\bminimum\s+qualifications\b',
+    r'\bpreferred\s+qualifications\b', r'\bhow\s+to\s+apply\b', r'\bapply\s+now\b',
+    r'\bbenefits\s+&\s+perks\b', r'\bequal\s+opportunity\s+employer\b', r'\bcompensation\b',
+    r'\bsalary\s+range\b', r'\bjob\s+type\b', r'\bfull-time\b', r'\bpart-time\b'
+]
+
+# Standard Resume Indicators (Candidate Persona)
 RESUME_PATTERNS = [
     r'\beducation\b', r'\bexperience\b', r'\bskills\b', r'\bprojects\b', r'\bsummary\b',
     r'\bwork\s+history\b', r'\bemployment\b', r'\bachievements\b', r'\bcertifications\b',
     r'\binternship\b', r'\bcurriculum\s+vitae\b', r'\bresume\b', r'\bgithub\b', r'\blinkedin\b',
-    r'\bb\.tech\b', r'\bb\.e\b', r'\bb\.sc\b', r'\bm\.tech\b', r'\bdegree\b', r'\bsoftware\b',
+    r'\bb\.tech\b', r'\bb\.e\b', r'\bb\.sc\b', r'\bm\.tech\b', r'\bdegree\b', r'\bcgpa\b',
     r'\bdeveloper\b', r'\bengineer\b'
 ]
 
@@ -88,6 +116,20 @@ SKILL_TAXONOMY = {
     ],
     'Mobile': [
         'React Native', 'Flutter', 'Kotlin', 'Swift', 'Android', 'iOS', 'Android Studio', 'Xcode'
+    ],
+    'Mechanical': [
+        'AutoCAD', 'SolidWorks', 'CATIA', 'ANSYS', 'Creo', 'Fusion 360', 'Inventor', 'GD&T',
+        'Thermodynamics', 'Fluid Mechanics', 'Heat Transfer', 'CFD', 'FEA', 'CNC', 'Machining',
+        'Manufacturing', 'Mechatronics', 'Robotics', 'HVAC', 'Piping', 'Materials Science'
+    ],
+    'Electrical': [
+        'MATLAB', 'Simulink', 'Embedded C', 'Arduino', 'Raspberry Pi', 'Microcontrollers',
+        'PLC', 'SCADA', 'Power Systems', 'Circuit Design', 'PCB Design', 'VLSI', 'Verilog',
+        'VHDL', 'Altium', 'KiCAD', 'Control Systems'
+    ],
+    'Civil': [
+        'AutoCAD', 'Revit', 'STAAD Pro', 'ETABS', 'BIM', 'Surveying', 'Structural Analysis',
+        'Geotechnical', 'Concrete Technology'
     ]
 }
 
@@ -120,7 +162,39 @@ SKILL_ALIASES = {
     'golang': 'Go',
     'c sharp': 'C#',
     'c++': 'C++',
-    'aws cloud': 'AWS'
+    'aws cloud': 'AWS',
+    # Mechanical & Core Engineering Aliases
+    'cad': 'AutoCAD',
+    'autocad': 'AutoCAD',
+    'solid works': 'SolidWorks',
+    'solidworks': 'SolidWorks',
+    'catia': 'CATIA',
+    'ansys': 'ANSYS',
+    'creo': 'Creo',
+    'ptc creo': 'Creo',
+    'fusion 360': 'Fusion 360',
+    'fusion360': 'Fusion 360',
+    'inventor': 'Inventor',
+    'gdt': 'GD&T',
+    'gd&t': 'GD&T',
+    'cfd': 'CFD',
+    'fea': 'FEA',
+    'finite element analysis': 'FEA',
+    # Electrical & EEE Aliases
+    'embedded c': 'Embedded C',
+    'matlab': 'MATLAB',
+    'simulink': 'Simulink',
+    'plc': 'PLC',
+    'scada': 'SCADA',
+    'vlsi': 'VLSI',
+    'verilog': 'Verilog',
+    'vhdl': 'VHDL',
+    # Civil Aliases
+    'revit': 'Revit',
+    'staad pro': 'STAAD Pro',
+    'staad': 'STAAD Pro',
+    'etabs': 'ETABS',
+    'bim': 'BIM'
 }
 
 # ==============================================================================
@@ -266,6 +340,36 @@ ROLE_TAXONOMY = {
         'core_skills': ['C', 'C++', 'Microcontrollers', 'RTOS', 'Embedded Linux', 'ARM'],
         'secondary_skills': ['I2C', 'SPI', 'UART', 'Assembly', 'IoT', 'PCB Design'],
         'keywords': ['embedded', 'firmware', 'microcontroller']
+    },
+    'Mechanical Design Engineer': {
+        'core_skills': ['AutoCAD', 'SolidWorks', 'GD&T', 'CAD', 'CATIA', 'ANSYS'],
+        'secondary_skills': ['Creo', 'FEA', 'Manufacturing', 'Fusion 360', 'Materials Science'],
+        'keywords': ['mechanical', 'cad', 'design engineer', 'solidworks', 'autocad', 'product design']
+    },
+    'Thermal & CFD Engineer': {
+        'core_skills': ['Thermodynamics', 'Fluid Mechanics', 'CFD', 'ANSYS', 'Heat Transfer'],
+        'secondary_skills': ['MATLAB', 'FEA', 'SolidWorks', 'HVAC'],
+        'keywords': ['thermal', 'cfd', 'fluid dynamics', 'ansys', 'aerodynamics']
+    },
+    'Manufacturing & Production Engineer': {
+        'core_skills': ['CNC', 'Manufacturing', 'Machining', 'AutoCAD', 'SolidWorks'],
+        'secondary_skills': ['GD&T', 'Quality Engineering', 'Lean Manufacturing', 'Materials Science'],
+        'keywords': ['manufacturing', 'production', 'cnc', 'machining', 'industrial']
+    },
+    'Robotics & Automation Engineer': {
+        'core_skills': ['Robotics', 'Mechatronics', 'Python', 'C++', 'Arduino', 'Microcontrollers'],
+        'secondary_skills': ['MATLAB', 'SolidWorks', 'Control Systems', 'PLC', 'Sensors'],
+        'keywords': ['robotics', 'automation', 'mechatronics', 'ros', 'robotic']
+    },
+    'Electrical & Electronics Engineer (EEE)': {
+        'core_skills': ['Circuit Design', 'Power Systems', 'Microcontrollers', 'MATLAB', 'PLC'],
+        'secondary_skills': ['SCADA', 'Simulink', 'PCB Design', 'Embedded C', 'Control Systems'],
+        'keywords': ['electrical', 'eee', 'power systems', 'electronics', 'plc']
+    },
+    'Civil & Structural Engineer': {
+        'core_skills': ['AutoCAD', 'STAAD Pro', 'ETABS', 'Structural Analysis', 'Civil Engineering'],
+        'secondary_skills': ['Revit', 'BIM', 'Surveying', 'Geotechnical', 'Concrete Technology'],
+        'keywords': ['civil', 'structural', 'staad', 'revit', 'site engineer', 'construction']
     }
 }
 
@@ -595,17 +699,22 @@ def analyze_resume_text(text: str) -> Dict[str, Any]:
 
     text_lower = clean_raw.lower()
 
-    # 1. Document Classification (Resume vs Non-Resume Document like College Bill / Invoice)
-    irrelevant_matches = [p.replace(r'\b', '').replace(r'\s+', ' ') for p in IRRELEVANT_PATTERNS if re.search(p, text_lower)]
+    # 1. Multi-Class Document Classification (Resume vs Research Paper vs Job Description vs Grocery/Fee Bill)
+    bill_matches = [p.replace(r'\b', '').replace(r'\s+', ' ') for p in FINANCIAL_BILL_PATTERNS if re.search(p, text_lower)]
+    research_matches = [p.replace(r'\b', '').replace(r'\s+', ' ') for p in RESEARCH_PAPER_PATTERNS if re.search(p, text_lower)]
+    job_desc_matches = [p.replace(r'\b', '').replace(r'\s+', ' ') for p in JOB_DESCRIPTION_PATTERNS if re.search(p, text_lower)]
     resume_matches = [p.replace(r'\b', '').replace(r'\s+', ' ') for p in RESUME_PATTERNS if re.search(p, text_lower)]
 
-    is_irrelevant = len(irrelevant_matches) >= 2 or (len(irrelevant_matches) > 0 and len(resume_matches) == 0)
-
-    if is_irrelevant:
+    # 1A. Check Financial Bill / Grocery Store Receipt / Invoice / Tuition Fee
+    is_bill = len(bill_matches) >= 2 or (len(bill_matches) >= 1 and len(resume_matches) <= 1)
+    if is_bill:
+        doc_label = "Grocery Store Receipt / Financial Bill / Invoice" if any(k in text_lower for k in ['grocery', 'supermarket', 'mart', 'cashier', 'store', 'mrp', 'qty', 'item']) else "College Fee Receipt / Bank Challan / Financial Invoice"
         return {
             'is_resume': False,
-            'document_type': 'College Fee Receipt / Financial Bill / Non-Resume Document',
-            'warning': 'Irrelevant Document Detected: Uploaded file appears to be a College Bill / Fee Receipt rather than a Resume/CV. No technical skills were extracted.',
+            'isResume': False,
+            'document_type': doc_label,
+            'documentType': doc_label,
+            'warning': f'Irrelevant Document Detected: Uploaded file appears to be a {doc_label} rather than an official Resume/CV. No technical skills were extracted.',
             'extracted_skills': [],
             'strong_skills': [],
             'project_skills': [],
@@ -615,7 +724,49 @@ def analyze_resume_text(text: str) -> Dict[str, Any]:
             'skill_gaps': {},
             'learning_roadmap': [],
             'score': 0,
-            'detected_bill_keywords': irrelevant_matches
+            'detected_keywords': bill_matches[:5]
+        }
+
+    # 1B. Check Academic Research / Journal Paper (e.g. IEEE / Springer / arXiv publication)
+    is_research = len(research_matches) >= 3 or ('abstract' in text_lower and 'references' in text_lower and ('introduction' in text_lower or 'doi' in text_lower or 'ieee' in text_lower))
+    if is_research and len(resume_matches) <= 3:
+        return {
+            'is_resume': False,
+            'isResume': False,
+            'document_type': 'Academic Research / Journal Paper',
+            'documentType': 'Academic Research / Journal Paper',
+            'warning': 'Document Rejected: Uploaded file is an Academic Research / Journal Paper (contains Abstract, Methodology, Citations, References) rather than a Candidate Resume. Technical keywords from scientific literature are not ingested as personal student skills.',
+            'extracted_skills': [],
+            'strong_skills': [],
+            'project_skills': [],
+            'experience_skills': [],
+            'predicted_roles': [],
+            'primary_role': None,
+            'skill_gaps': {},
+            'learning_roadmap': [],
+            'score': 0,
+            'detected_keywords': research_matches[:5]
+        }
+
+    # 1C. Check Employer Job Description / Vacancy Notice
+    is_job_desc = len(job_desc_matches) >= 3 and not any(k in text_lower for k in ['education', 'cgpa', 'b.tech', 'b.e', 'curriculum vitae', 'my projects'])
+    if is_job_desc:
+        return {
+            'is_resume': False,
+            'isResume': False,
+            'document_type': 'Employer Job Description / Vacancy Notice',
+            'documentType': 'Employer Job Description / Vacancy Notice',
+            'warning': 'Document Rejected: Uploaded file appears to be a Recruiter Job Description / Vacancy Posting rather than an Applicant Resume/CV. Please upload your personal student resume.',
+            'extracted_skills': [],
+            'strong_skills': [],
+            'project_skills': [],
+            'experience_skills': [],
+            'predicted_roles': [],
+            'primary_role': None,
+            'skill_gaps': {},
+            'learning_roadmap': [],
+            'score': 0,
+            'detected_keywords': job_desc_matches[:5]
         }
 
     # 2. Section Detection

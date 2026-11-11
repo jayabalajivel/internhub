@@ -19,6 +19,8 @@ import {
   AlertIcon,
 } from "../components/Icons"
 import { api } from "../api"
+import { ROLE_ROADMAPS, getRoleRoadmap } from "../roadmaps"
+import { isSkillSatisfied } from "../jobServices"
 
 interface Props {
   onNavigate: (p: string) => void
@@ -55,6 +57,7 @@ export default function ResumeUpload({ onNavigate }: Props) {
   const [currentStep, setCurrentStep] = useState(0)
   const [resultData, setResultData] = useState<any>(null)
   const [recommendedJobs, setRecommendedJobs] = useState<any[]>([])
+  const [roadmapRole, setRoadmapRole] = useState<string>("")
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -64,6 +67,9 @@ export default function ResumeUpload({ onNavigate }: Props) {
         const parsed = JSON.parse(cachedProfile)
         if (parsed && parsed.extracted_skills) {
           setResultData(parsed)
+          if (parsed.primary_role) {
+            setRoadmapRole(parsed.primary_role)
+          }
         }
       } catch (e) {
         console.error(e)
@@ -114,6 +120,9 @@ export default function ResumeUpload({ onNavigate }: Props) {
     function checkAndComplete() {
       if (apiCompleted && progressCompleted) {
         setResultData(result)
+        if (result?.primary_role) {
+          setRoadmapRole(result.primary_role)
+        }
         setStage("result")
 
         api
@@ -136,25 +145,66 @@ export default function ResumeUpload({ onNavigate }: Props) {
     if (file) startAnalysis(file)
   }
 
+  const handleRoleChange = async (newRole: string) => {
+    setRoadmapRole(newRole)
+    if (resultData) {
+      setResultData((prev: any) => ({
+        ...prev,
+        primary_role: newRole,
+        domain: newRole,
+      }))
+    }
+    try {
+      await (api as any).updatePrimaryRole(newRole)
+      api
+        .getRecommendations()
+        .then((jobs) => setRecommendedJobs(jobs.slice(0, 4)))
+        .catch(() => {})
+    } catch (e) {
+      console.error("Failed to update primary role:", e)
+    }
+  }
+
+  const activeRole =
+    roadmapRole || resultData?.primary_role || "Full Stack Developer"
+  const activeRoadmap = getRoleRoadmap(
+    activeRole,
+    resultData?.extracted_skills || [],
+  )
+  const activeRoleSkills = activeRoadmap.skills || []
+  const foundSkillsList = resultData?.extracted_skills || []
+  const activeAlreadyHave = activeRoleSkills.filter((rs: string) =>
+    isSkillSatisfied(foundSkillsList, rs),
+  )
+  const activeNeedToLearn = activeRoleSkills.filter(
+    (rs: string) => !isSkillSatisfied(foundSkillsList, rs),
+  )
+  const activeMatchPct =
+    activeRoleSkills.length > 0
+      ? Math.round(
+          (activeAlreadyHave.length / activeRoleSkills.length) * 100,
+        )
+      : 0
+
   const skillScores = resultData?.extracted_skills
     ? resultData.extracted_skills.map((s: string) => {
-        const isProject = (resultData.project_skills || []).some(
-          (ps: string) => ps.toLowerCase() === s.toLowerCase(),
-        )
-        const isExp = (resultData.experience_skills || []).some(
-          (es: string) => es.toLowerCase() === s.toLowerCase(),
-        )
-        const isStrong = (resultData.strong_skills || []).some(
-          (ss: string) => ss.toLowerCase() === s.toLowerCase(),
-        )
+      const isProject = (resultData.project_skills || []).some(
+        (ps: string) => ps.toLowerCase() === s.toLowerCase(),
+      )
+      const isExp = (resultData.experience_skills || []).some(
+        (es: string) => es.toLowerCase() === s.toLowerCase(),
+      )
+      const isStrong = (resultData.strong_skills || []).some(
+        (ss: string) => ss.toLowerCase() === s.toLowerCase(),
+      )
 
-        let score = 70
-        if (isProject && isExp) score = 95
-        else if (isProject || isStrong) score = 88
-        else if (isExp) score = 82
+      let score = 70
+      if (isProject && isExp) score = 95
+      else if (isProject || isStrong) score = 88
+      else if (isExp) score = 82
 
-        return { skill: s, score }
-      })
+      return { skill: s, score }
+    })
     : []
 
   return (
@@ -164,7 +214,7 @@ export default function ResumeUpload({ onNavigate }: Props) {
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-500">AI/ML Resume</span> Analysis & Recommendation System
         </h1>
         <p className="text-slate-500 text-sm max-w-3xl">
-          Upload your CV to automatically extract technical skills, project evidence, predict software roles, analyze skill gaps, and rank live job recommendations.
+          Upload your CV to automatically extract technical skills, project evidence, predict multi-domain engineering roles (CS, IT, Mechanical, EEE, Civil), analyze skill gaps, and rank live job recommendations.
         </p>
       </div>
 
@@ -180,11 +230,10 @@ export default function ResumeUpload({ onNavigate }: Props) {
               onDragLeave={() => setDragging(false)}
               onDrop={handleDrop}
               onClick={() => fileRef.current?.click()}
-              className={`border-2 border-dashed rounded-3xl p-16 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
-                dragging 
-                  ? 'border-indigo-500 bg-indigo-50/50' 
+              className={`border-2 border-dashed rounded-3xl p-16 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${dragging
+                  ? 'border-indigo-500 bg-indigo-50/50'
                   : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'
-              }`}
+                }`}
             >
               <input
                 ref={fileRef}
@@ -200,41 +249,8 @@ export default function ResumeUpload({ onNavigate }: Props) {
                 {dragging ? "Drop your resume here!" : "Drop your Resume (PDF / DOCX / TXT) or click to browse"}
               </h3>
               <p className="text-sm text-slate-500 font-medium">
-                Extracts skills, project evidence, software roles, skill gaps & matching jobs.
+                Extracts skills, project evidence, engineering roles (CS, Mech, EEE, Civil), skill gaps & matching jobs.
               </p>
-            </div>
-
-            {/* Test Sample Profiles */}
-            <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-6">
-              <div className="text-sm font-bold text-emerald-700 mb-4 flex items-center gap-2">
-                <SparklesIcon size={16} /> Test Profiles (Instant Multi-Role Analysis)
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  className="bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-sm"
-                  onClick={() => startAnalysis(new File(["TECHNICAL SKILLS\nHTML, CSS, JavaScript, React, Tailwind CSS, Git\n\nPROJECTS\nDeveloped a responsive e-commerce application using React, JavaScript, HTML, CSS and Git."], "frontend_developer_resume.txt"))}
-                >
-                  🚀 Frontend (React/JS) Resume
-                </button>
-                <button
-                  className="bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-sm"
-                  onClick={() => startAnalysis(new File(["TECHNICAL SKILLS\nPython, Pandas, NumPy, Scikit-learn, SQL, Machine Learning\n\nPROJECTS\nBuilt customer churn prediction model using Python, Pandas, Scikit-learn and SQL."], "data_science_resume.txt"))}
-                >
-                  📊 Data Science / ML Resume
-                </button>
-                <button
-                  className="bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-sm"
-                  onClick={() => startAnalysis(new File(["TECHNICAL SKILLS\nJava, Spring Boot, MySQL, REST API, Git\n\nPROJECTS\nDesigned scalable microservices architecture using Java, Spring Boot, MySQL and REST API."], "backend_java_resume.txt"))}
-                >
-                  ☕ Java Backend Resume
-                </button>
-                <button
-                  className="bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-sm"
-                  onClick={() => startAnalysis(new File(["Tuition Fee Receipt\nTransaction ID: TXN98765\nCollege Fee: $5,000\nTotal Amount Paid: $5,000\nSemester Fee Receipt"], "college_fee_receipt.txt"))}
-                >
-                  ⚠️ Non-Resume (College Bill)
-                </button>
-              </div>
             </div>
           </div>
 
@@ -248,7 +264,7 @@ export default function ResumeUpload({ onNavigate }: Props) {
                 { label: "Document Classification", desc: "Validates Resume/CV vs Irrelevant Files (Bills/Receipts)", color: "text-indigo-500", bg: "bg-indigo-50", border: "border-indigo-100" },
                 { label: "Skill Normalization", desc: "Normalizes JS -> JavaScript, Mongo DB -> MongoDB, etc.", color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100" },
                 { label: "Project-Aware Weighting", desc: "Gives higher confidence to skills backed by project evidence", color: "text-purple-500", bg: "bg-purple-50", border: "border-purple-100" },
-                { label: "35+ Software Role Prediction", desc: "Predicts roles (Frontend, Backend, ML, DevOps, etc.)", color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100" },
+                { label: "Multi-Department Role Prediction", desc: "Predicts roles across CS/IT, Mechanical, EEE, Civil & Robotics", color: "text-amber-500", bg: "bg-amber-50", border: "border-amber-100" },
                 { label: "Skill Gap & Learning Roadmap", desc: "Identifies missing skills & generates 5-stage roadmap", color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100" },
                 { label: "Job Matching & Ranking", desc: "Compares candidate profile with live aggregated API jobs", color: "text-rose-500", bg: "bg-rose-50", border: "border-rose-100" },
               ].map(({ label, desc, color, bg, border }) => (
@@ -292,68 +308,109 @@ export default function ResumeUpload({ onNavigate }: Props) {
         </div>
       )}
 
-      {stage === "result" && resultData && (
+      {stage === "result" && (
         <div className="space-y-6">
-          {/* NON-RESUME / IRRELEVANT DOCUMENT ALERT */}
-          {resultData?.is_resume === false || resultData?.isResume === false ? (
+          {!resultData ? (
             <div className="bg-rose-50 border border-rose-200 rounded-3xl p-8 shadow-sm">
               <div className="flex items-start gap-4 mb-6">
                 <div className="bg-white p-3 rounded-2xl shadow-sm border border-rose-100">
-                   <AlertIcon size={32} className="text-rose-500" />
+                  <AlertIcon size={32} className="text-rose-500" />
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-rose-700 mb-1">
-                    Irrelevant Document Detected: {resultData?.document_type || resultData?.documentType || "College Bill / Receipt"}
+                    Document Processing Error
                   </h3>
                   <p className="text-sm font-medium text-rose-600/80">
-                    {resultData?.warning || "The uploaded file appears to be a College Bill / Fee Receipt rather than a Resume/CV."}
+                    The uploaded file could not be parsed into readable text. Please ensure you are uploading a text-searchable PDF, DOCX, or TXT file.
                   </p>
                 </div>
               </div>
-              
-              <div className="bg-white border border-rose-100 rounded-2xl p-6 mb-6">
-                <strong className="text-sm text-slate-900 mb-4 block">NLP Classification Audit Result:</strong>
-                <ul className="space-y-3 text-sm text-slate-600">
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                    Classification: <strong className="text-rose-600 ml-1">Non-Resume File (College Bill / Financial Document)</strong>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                    Technical Skill Extraction: <strong className="text-slate-800 ml-1">0 technical skills detected (No fake skills generated)</strong>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                    Role Prediction & Job Matching: <strong className="text-slate-800 ml-1">Disabled for non-resume documents</strong>
-                  </li>
-                </ul>
-              </div>
-              
               <button
                 onClick={() => setStage("upload")}
                 className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-3 rounded-xl font-semibold shadow-sm transition-colors text-sm"
               >
-                Upload an Official Resume / CV
+                Upload Again
               </button>
+            </div>
+          ) : resultData?.is_resume === false || resultData?.isResume === false ? (
+            /* NON-RESUME / IRRELEVANT DOCUMENT ALERT */
+            <div className="bg-rose-50/70 border border-rose-200 rounded-3xl p-8 shadow-sm">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="bg-white p-3 rounded-2xl shadow-sm border border-rose-100">
+                  <AlertIcon size={32} className="text-rose-500" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 px-2.5 py-0.5 rounded-full">
+                      Guardrail Activated
+                    </span>
+                    <span className="text-xs font-semibold text-rose-500">
+                      100% Precision Filter
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-1">
+                    {resultData?.document_type || resultData?.documentType || "Irrelevant Document Detected"}
+                  </h3>
+                  <p className="text-sm font-medium text-slate-600 leading-relaxed">
+                    {resultData?.warning || "The uploaded document does not match a candidate resume/CV structure."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-rose-100 rounded-2xl p-6 mb-6">
+                <strong className="text-sm text-slate-900 mb-4 block flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                  NLP Document Classification & Integrity Audit:
+                </strong>
+                <ul className="space-y-3 text-sm text-slate-600">
+                  <li className="flex items-start gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400 mt-2 shrink-0"></span>
+                    <span>
+                      Detected Classification: <strong className="text-rose-700 ml-1">{resultData?.document_type || resultData?.documentType || "Non-Resume File"}</strong>
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 shrink-0"></span>
+                    <span>
+                      Profile Integrity: <strong className="text-slate-800 ml-1">0 technical skills accepted</strong> (Prevents corrupted data from polluting candidate recommendations).
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 shrink-0"></span>
+                    <span>
+                      Recommendation Pipeline: <strong className="text-slate-800 ml-1">Safely bypassed</strong> until a verified candidate resume/CV is provided.
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => setStage("upload")}
+                  className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-3 rounded-xl font-semibold shadow-sm transition-colors text-sm flex items-center gap-2"
+                >
+                  <RefreshIcon size={16} /> Upload an Official Candidate Resume / CV
+                </button>
+              </div>
             </div>
           ) : resultData?.warning && resultData?.extracted_skills?.length < 2 ? (
             /* INSUFFICIENT RESUME WARNING */
             <div className="bg-amber-50 border border-amber-200 rounded-3xl p-8 shadow-sm">
               <div className="flex items-start gap-4 mb-6">
                 <div className="bg-white p-3 rounded-2xl shadow-sm border border-amber-100">
-                   <AlertIcon size={32} className="text-amber-500" />
+                  <AlertIcon size={32} className="text-amber-500" />
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-amber-700 mb-1">Insufficient Resume Information</h3>
                   <p className="text-sm font-medium text-amber-600/80">{resultData?.warning}</p>
                 </div>
               </div>
-              
+
               <div className="bg-white border border-amber-100 rounded-2xl p-6 mb-6 text-sm">
                 <strong className="text-slate-900 mr-2">Skills Detected So Far:</strong>
                 <span className="text-slate-600">{resultData?.extracted_skills?.join(", ") || "None"}</span>
               </div>
-              
+
               <button
                 onClick={() => setStage("upload")}
                 className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-xl font-semibold shadow-sm transition-colors text-sm"
@@ -388,25 +445,47 @@ export default function ResumeUpload({ onNavigate }: Props) {
                     </div>
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Primary Predicted Role</div>
-                    <div className="text-2xl font-bold text-slate-900 mb-1">{resultData?.primary_role || resultData?.domain || "Software Engineer"}</div>
-                    <div className="text-sm font-medium text-slate-500">Verified Technical Candidate Profile</div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        Primary Target Role
+                      </span>
+                      <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100">
+                        {activeRole === (resultData?.primary_role || resultData?.domain) ? "AI Verified" : "User Selected"}
+                      </span>
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mb-2">
+                      {activeRole}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-500">Change Primary Role:</span>
+                      <select
+                        value={activeRole}
+                        onChange={(e) => handleRoleChange(e.target.value)}
+                        className="bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm"
+                      >
+                        {Object.values(ROLE_ROADMAPS).map((r) => (
+                          <option key={r.role} value={r.role}>
+                            {r.role} ({r.department})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex-1 hidden md:block"></div>
 
                 <div className="flex items-center gap-8 md:border-l md:border-slate-200 md:pl-8 self-stretch">
-                   {[
-                      { label: "Technical Skills", value: `${resultData?.extracted_skills?.length || 0} items`, color: "text-emerald-600" },
-                      { label: "Project Evidence", value: `${resultData?.project_skills?.length || resultData?.strong_skills?.length || 0} skills`, color: "text-purple-600" },
-                      { label: "Predicted Roles", value: `${resultData?.predicted_roles?.length || 1} roles`, color: "text-indigo-600" },
-                    ].map(({ label, value, color }) => (
-                      <div key={label} className="text-center">
-                        <div className="text-[11px] font-bold text-slate-400 uppercase mb-1">{label}</div>
-                        <div className={`text-xl font-bold ${color}`}>{value}</div>
-                      </div>
-                    ))}
+                  {[
+                    { label: "Technical Skills", value: `${resultData?.extracted_skills?.length || 0} items`, color: "text-emerald-600" },
+                    { label: "Project Evidence", value: `${resultData?.project_skills?.length || resultData?.strong_skills?.length || 0} skills`, color: "text-purple-600" },
+                    { label: "Predicted Roles", value: `${resultData?.predicted_roles?.length || 1} roles`, color: "text-indigo-600" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="text-center">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase mb-1">{label}</div>
+                      <div className={`text-xl font-bold ${color}`}>{value}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -428,11 +507,10 @@ export default function ResumeUpload({ onNavigate }: Props) {
                         return (
                           <span
                             key={s}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-colors ${
-                              isProjectBacked 
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-colors ${isProjectBacked
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : 'bg-slate-50 text-slate-700 border-slate-200'
-                            }`}
+                              }`}
                           >
                             {s}
                             {isProjectBacked && (
@@ -481,14 +559,14 @@ export default function ResumeUpload({ onNavigate }: Props) {
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
                             <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                              <div 
-                                className={`h-full rounded-full ${idx === 0 ? 'bg-indigo-500' : 'bg-slate-400'}`} 
+                              <div
+                                className={`h-full rounded-full ${idx === 0 ? 'bg-indigo-500' : 'bg-slate-400'}`}
                                 style={{ width: `${r.confidence}%` }}
                               ></div>
                             </div>
                             <span className={`text-sm font-bold w-10 text-right ${idx === 0 ? 'text-indigo-600' : 'text-slate-600'}`}>
                               {r.confidence}%
-                           </span>
+                            </span>
                           </div>
                         </div>
                       ))
@@ -499,53 +577,141 @@ export default function ResumeUpload({ onNavigate }: Props) {
                 </div>
               </div>
 
-              {/* GRID ROW 2: SKILL GAP ANALYSIS & DYNAMIC ROADMAP */}
+              {/* GRID ROW 2: SYNCHRONIZED SKILL GAP ANALYSIS & DYNAMIC ROADMAP */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Skill Gap Analysis */}
-                <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6">Skill Gap Analysis ({resultData?.primary_role})</h3>
-
-                  <div className="mb-8">
-                    <div className="text-xs font-bold text-emerald-600 mb-3 flex items-center gap-1.5 uppercase tracking-wide">
-                      <CheckIcon size={14} /> ALREADY HAVE ({resultData?.skill_gaps?.already_have?.length || 0})
+                {/* Skill Gap Analysis Card */}
+                <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between gap-3 mb-6">
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Target Role Skill Gap</div>
+                        <h3 className="text-lg font-bold text-slate-900">{activeRole}</h3>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${
+                        activeMatchPct >= 70 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                        activeMatchPct >= 40 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                        'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}>
+                        {activeMatchPct}% Match
+                      </span>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {resultData?.skill_gaps?.already_have?.map((s: string) => (
-                        <span key={s} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
-                          ✓ {s}
-                        </span>
-                      ))}
+
+                    <div className="mb-6">
+                      <div className="text-xs font-bold text-emerald-600 mb-3 flex items-center gap-1.5 uppercase tracking-wide">
+                        <CheckIcon size={14} /> ALREADY HAVE ({activeAlreadyHave.length})
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {activeAlreadyHave.length > 0 ? (
+                          activeAlreadyHave.map((s: string) => (
+                            <span key={s} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
+                              ✓ {s}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">No matching skills acquired yet for this role.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-6">
+                      <div className="text-xs font-bold text-rose-600 mb-3 flex items-center gap-1.5 uppercase tracking-wide">
+                        ✕ NEED TO LEARN / GAPS ({activeNeedToLearn.length})
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {activeNeedToLearn.length > 0 ? (
+                          activeNeedToLearn.map((s: string) => (
+                            <span key={s} className="bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
+                              + {s}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200">
+                            🎉 Fully qualified for this role!
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="border-t border-slate-100 pt-6">
-                    <div className="text-xs font-bold text-rose-600 mb-3 flex items-center gap-1.5 uppercase tracking-wide">
-                      ✕ NEED TO LEARN ({resultData?.skill_gaps?.need_to_learn?.length || 0})
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {resultData?.skill_gaps?.need_to_learn?.map((s: string) => (
-                        <span key={s} className="bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
-                          + {s}
-                        </span>
-                      ))}
-                    </div>
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span>{activeAlreadyHave.length} of {activeRoleSkills.length} competencies acquired</span>
+                    <button
+                      onClick={() => handleRoleChange(activeRole)}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:underline flex items-center gap-1"
+                    >
+                      Set as Primary Target Role
+                    </button>
                   </div>
                 </div>
 
                 {/* Dynamic 5-Stage Learning Roadmap */}
-                <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                    <ZapIcon size={20} className="text-amber-500" /> Personalized Roadmap
-                  </h3>
+                <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                      <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <ZapIcon size={20} className="text-amber-500" />
+                        <span>Roadmap: <span className="text-indigo-600">{activeRole}</span></span>
+                      </h3>
+                      <select
+                        value={activeRole}
+                        onChange={(e) => handleRoleChange(e.target.value)}
+                        className="bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold rounded-xl px-2.5 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                      >
+                        {Object.values(ROLE_ROADMAPS).map((r) => (
+                          <option key={r.role} value={r.role}>
+                            {r.role} ({r.department})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div className="space-y-3">
-                    {resultData?.learning_roadmap?.map((step: any) => (
-                      <div key={step.stage} className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                        <div className="text-sm font-bold text-indigo-700 mb-1">Stage {step.stage}: {step.title}</div>
-                        <div className="text-xs font-medium text-slate-600 leading-relaxed">{step.description}</div>
-                      </div>
-                    ))}
+                    {/* Quick Role Badges */}
+                    <div className="flex flex-wrap gap-1.5 mb-5">
+                      {["Full Stack Developer", "Python Developer", "Mechanical Design Engineer", "Electrical & Electronics Engineer (EEE)", "Civil & Structural Engineer"].map((rName) => (
+                        <button
+                          key={rName}
+                          onClick={() => handleRoleChange(rName)}
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all ${
+                            activeRole === rName
+                              ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {rName.replace(" Engineer", "").replace(" Developer", "")}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-3 mb-6">
+                      {activeRoadmap.stages.map((step) => (
+                        <div key={step.stage} className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <div className="text-xs font-bold text-indigo-700">
+                              Stage {step.stage}: {step.title}
+                            </div>
+                            <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded">
+                              {step.duration}
+                            </span>
+                          </div>
+                          <div className="text-xs font-medium text-slate-600 leading-relaxed mb-2">
+                            {step.description}
+                          </div>
+                          <div className="text-[11px] font-semibold text-emerald-700 bg-white border border-emerald-100 p-2 rounded-lg flex items-center gap-1.5">
+                            <span>🚀 Project:</span>
+                            <span>{step.project}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+
+                  <button
+                    onClick={() => onNavigate("skillgap")}
+                    className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <span>Open Full Interactive Roadmap & Progress Tracker</span>
+                    <span>→</span>
+                  </button>
                 </div>
               </div>
 
@@ -581,10 +747,10 @@ export default function ResumeUpload({ onNavigate }: Props) {
                         </div>
 
                         <div className="border-t border-slate-200 pt-3 flex items-start gap-2">
-                           <span className="text-base mt-0.5">💡</span>
-                           <span className="text-xs font-medium text-slate-600 leading-relaxed">
-                             <strong className="text-slate-900">Why Recommended:</strong> {job.matchReason || "Matches candidate profile."}
-                           </span>
+                          <span className="text-base mt-0.5">💡</span>
+                          <span className="text-xs font-medium text-slate-600 leading-relaxed">
+                            <strong className="text-slate-900">Why Recommended:</strong> {job.matchReason || "Matches candidate profile."}
+                          </span>
                         </div>
                       </div>
                     ))}

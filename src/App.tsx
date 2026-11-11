@@ -10,6 +10,7 @@ import Profile from "./pages/Profile"
 import Notifications from "./pages/Notifications"
 import Saved from "./pages/Saved"
 import Sidebar from "./components/Sidebar"
+import { supabase, isSupabaseConfigured } from "./lib/supabase"
 
 type Page = "landing" | "auth" | "dashboard" | "internships" | "resume" | "skills" | "tracker" | "saved" | "notifications" | "profile" | "settings"
 
@@ -25,10 +26,76 @@ const APP_PAGES: Page[] = [
   "settings",
 ]
 
+const getInitialPage = (): Page => {
+  const params = new URLSearchParams(window.location.search)
+  const qPage = params.get("page")
+  if (qPage && APP_PAGES.includes(qPage as Page)) {
+    return qPage as Page
+  }
+  if (qPage === "landing" || window.location.hash === "#landing") {
+    return "landing"
+  }
+  if (qPage === "dashboard") {
+    return "dashboard"
+  }
+  // Default to login / auth page directly
+  return "auth"
+}
+
 export default function App() {
-  const [page, setPage] = useState<Page>(
-    localStorage.getItem("internhub_token") ? "dashboard" : "landing",
-  )
+  const [page, setPage] = useState<Page>(getInitialPage)
+
+  useEffect(() => {
+    if (isSupabaseConfigured() && supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          localStorage.setItem("internhub_token", session.access_token)
+          if (window.location.hash || window.location.search.includes("code=")) {
+            window.history.replaceState({}, document.title, window.location.pathname)
+            setPage("dashboard")
+          }
+        }
+      })
+
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event, session) => {
+        if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+          localStorage.setItem("internhub_token", session.access_token)
+          const userMeta = session.user?.user_metadata || {}
+          const userEmail = session.user?.email || ""
+          const userName =
+            userMeta.full_name ||
+            userMeta.name ||
+            userEmail.split("@")[0] ||
+            "Student"
+
+          const mockProfileStr = localStorage.getItem(
+            "internhub_mock_user_profile",
+          )
+          let prof = mockProfileStr ? JSON.parse(mockProfileStr) : {}
+          prof.name = userName
+          prof.email = userEmail
+          prof.profile = prof.profile || {
+            skills: ["React", "JavaScript", "TypeScript"],
+            domain: "Software Engineering",
+            university: "Engineering College",
+          }
+          localStorage.setItem(
+            "internhub_mock_user_profile",
+            JSON.stringify(prof),
+          )
+
+          setPage("dashboard")
+        } else if (event === "SIGNED_OUT") {
+          localStorage.removeItem("internhub_token")
+          setPage("auth")
+        }
+      })
+
+      return () => subscription.unsubscribe()
+    }
+  }, [])
 
   const navigate = (p: string) => setPage(p as Page)
 
@@ -48,7 +115,7 @@ export default function App() {
         {page === "internships" && <Internships onNavigate={navigate} />}
         {page === "resume" && <ResumeUpload onNavigate={navigate} />}
         {page === "skills" && <SkillGap onNavigate={navigate} />}
-        {page === "tracker" && <ApplicationTracker />}
+        {(page === "tracker" || (page as string) === "applications") && <ApplicationTracker onNavigate={navigate} />}
         {page === "saved" && <Saved onNavigate={navigate} />}
         {page === "notifications" && <Notifications onNavigate={navigate} />}
         {page === "profile" && <Profile />}

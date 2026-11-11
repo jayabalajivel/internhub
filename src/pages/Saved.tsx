@@ -7,7 +7,7 @@ import {
   SparklesIcon,
 } from "../components/Icons"
 import { api } from "../api"
-import { syncAndPurgeRemovedJobs } from "../jobServices"
+import { syncAndPurgeRemovedJobs, getSafeApplyUrl } from "../jobServices"
 
 interface Props {
   onNavigate: (p: string) => void
@@ -166,7 +166,7 @@ export default function Saved({ onNavigate }: Props) {
                       <BookmarkIcon size={16} className="text-rose-500 fill-rose-500 group-hover:scale-110 transition-transform" />
                     </button>
                     <a
-                      href={job.applyLink}
+                      href={getSafeApplyUrl(job)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"

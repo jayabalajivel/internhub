@@ -1,3 +1,5 @@
+import { DEFAULT_CURATED_JOBS } from "./defaultJobs.ts"
+
 // Multi-Provider Live Job Aggregator Engine
 // Integrates:
 // 1. JobDataAPI (sk-live-wyuFuBsDmFFCP9o9wGlbDkef3fKJdnI35Xhy4wfv)
@@ -612,15 +614,14 @@ export async function getAggregatedLiveJobs(
     })
   }
 
-  // 2. Specific State / City Location Filter
+  // 2. Specific State / City Location Filter (handles synonyms like Bangalore <-> Bengaluru)
   if (location && location.trim().length > 0) {
     const locLower = location.toLowerCase().trim()
     results = results.filter(
       (j) =>
-        j.location.toLowerCase().includes(locLower) ||
-        j.title.toLowerCase().includes(locLower) ||
-        j.description.toLowerCase().includes(locLower) ||
-        j.location.toLowerCase().includes("remote"),
+        matchLocation(j.location, locLower) ||
+        matchLocation(j.title, locLower) ||
+        matchLocation(j.description, locLower),
     )
   }
 
@@ -656,6 +657,44 @@ export async function getAggregatedLiveJobs(
     seen.add(key)
     return true
   })
+
+  // If live results pool is small or timed out, supplement with verified curated opportunities
+  if (deduplicated.length < 8) {
+    let fallbackPool = DEFAULT_CURATED_JOBS
+    if (country && country !== "Worldwide" && country !== "All") {
+      fallbackPool = fallbackPool.filter((j) => matchLocation(j.location, country))
+    }
+    if (location && location.trim().length > 0) {
+      fallbackPool = fallbackPool.filter(
+        (j) => matchLocation(j.location, location) || matchLocation(j.title, location),
+      )
+    }
+    if (searchQuery && searchQuery.trim().length > 0) {
+      const q = searchQuery.toLowerCase().trim()
+      fallbackPool = fallbackPool.filter(
+        (j) =>
+          j.title.toLowerCase().includes(q) ||
+          j.company.toLowerCase().includes(q) ||
+          j.description.toLowerCase().includes(q) ||
+          matchLocation(j.location, q),
+      )
+    }
+    if (workMode && workMode !== "All") {
+      const wmLower = workMode.toLowerCase()
+      if (wmLower === "remote") {
+        fallbackPool = fallbackPool.filter((j) =>
+          j.location.toLowerCase().includes("remote"),
+        )
+      }
+    }
+    fallbackPool.forEach((j) => {
+      const key = `${j.title.toLowerCase()}_${j.company.toLowerCase()}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        deduplicated.push(j)
+      }
+    })
+  }
 
   // Save to cache
   if (deduplicated.length > 0) {
@@ -901,7 +940,63 @@ export const SKILL_ALIASES: Record<string, string> = {
   flutter: "Flutter",
   android: "Android",
   ios: "iOS",
-  "react native": "React Native",
+  // Mechanical & Automotive Engineering
+  autocad: "AutoCAD",
+  cad: "AutoCAD",
+  solidworks: "SolidWorks",
+  "solid works": "SolidWorks",
+  catia: "CATIA",
+  ansys: "ANSYS",
+  creo: "Creo",
+  "ptc creo": "Creo",
+  "fusion 360": "Fusion 360",
+  fusion360: "Fusion 360",
+  inventor: "Inventor",
+  "gd&t": "GD&T",
+  gdt: "GD&T",
+  thermodynamics: "Thermodynamics",
+  "fluid mechanics": "Fluid Mechanics",
+  "heat transfer": "Heat Transfer",
+  cfd: "CFD",
+  fea: "FEA",
+  "finite element analysis": "FEA",
+  cnc: "CNC",
+  machining: "Machining",
+  manufacturing: "Manufacturing",
+  mechatronics: "Mechatronics",
+  robotics: "Robotics",
+  hvac: "HVAC",
+  piping: "Piping",
+  "materials science": "Materials Science",
+  // Electrical & Electronics Engineering (EEE / ECE)
+  matlab: "MATLAB",
+  simulink: "Simulink",
+  "embedded c": "Embedded C",
+  arduino: "Arduino",
+  "raspberry pi": "Raspberry Pi",
+  microcontroller: "Microcontrollers",
+  microcontrollers: "Microcontrollers",
+  plc: "PLC",
+  scada: "SCADA",
+  "power systems": "Power Systems",
+  "circuit design": "Circuit Design",
+  "pcb design": "PCB Design",
+  vlsi: "VLSI",
+  verilog: "Verilog",
+  vhdl: "VHDL",
+  altium: "Altium",
+  kicad: "KiCAD",
+  "control systems": "Control Systems",
+  // Civil & Structural Engineering
+  revit: "Revit",
+  "staad pro": "STAAD Pro",
+  staad: "STAAD Pro",
+  etabs: "ETABS",
+  bim: "BIM",
+  surveying: "Surveying",
+  "structural analysis": "Structural Analysis",
+  geotechnical: "Geotechnical",
+  "concrete technology": "Concrete Technology",
 }
 
 // Canonical Skill Taxonomy List
@@ -919,6 +1014,10 @@ export function normalizeSkill(raw: string): string {
 // Safe Regex Generator for Skill Matching (handles symbols like C++, C#, CI/CD, .NET, and word boundaries)
 export function getSkillRegex(skill: string): RegExp {
   const sLower = skill.toLowerCase()
+  if (sLower === "sql") {
+    // Matches SQL, PL/SQL, PL-SQL, PLSQL, T-SQL, TSQL, MS SQL, MSSQL, SQL Server, MySQL, PostgreSQL, SQLite, RDBMS
+    return /(?:^|[\s,;:(/\[-])(?:pl[\s/-]?sql|t[\s/-]?sql|ms[\s/-]?sql|sql(?:\s+server)?|mysql|postgresql|postgres|sqlite|rdbms)(?=$|[\s,;:)/\]!?.-])/i
+  }
   if (sLower === "c++") {
     return /(?:^|[\s,;:(/\[])c\+\+(?=$|[\s,;:)/\]!?.-])/i
   }
@@ -952,10 +1051,218 @@ export function getSkillRegex(skill: string): RegExp {
   if (sLower === ".net") {
     return /(?:^|[\s,;:(/\[])\.net(?=$|[\s,;:)/\]!?.-])/i
   }
+  if (sLower === "gd&t" || sLower === "gdt") {
+    return /(?:^|[\s,;:(/\[])(?:gd&t|gdt)(?=$|[\s,;:)/\]!?.-])/i
+  }
 
   // Standard boundary
   const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
   return new RegExp(`\\b${escaped}\\b`, "i")
+}
+
+// Multi-Department Skill Equivalence Clusters
+export const SKILL_EQUIVALENCE_CLUSTERS: string[][] = [
+  // Relational Databases & SQL
+  [
+    "sql",
+    "mysql",
+    "postgresql",
+    "postgres",
+    "sqlite",
+    "ms sql",
+    "sql server",
+    "pl/sql",
+    "plsql",
+    "t-sql",
+    "tsql",
+    "rdbms",
+    "mariadb",
+    "oracle sql",
+    "relational database",
+  ],
+  // NoSQL Databases
+  ["nosql", "mongodb", "mongo", "cassandra", "couchdb", "dynamodb", "firestore"],
+  // In-Memory & Caching
+  ["redis", "memcached", "caching"],
+  // Web Foundations
+  ["html", "html5", "html/css"],
+  ["css", "css3", "html/css", "styling"],
+  ["javascript", "js", "ecmascript", "es6", "es6+"],
+  ["typescript", "ts"],
+  ["react", "react.js", "reactjs"],
+  ["next.js", "nextjs", "next"],
+  ["tailwind css", "tailwind", "tailwindcss"],
+  ["bootstrap", "bootstrap 5"],
+  ["node.js", "nodejs", "node"],
+  ["express.js", "express", "expressjs"],
+  ["rest api", "rest", "restful", "restful api", "api design", "web api"],
+  // Python & Frameworks
+  ["python", "py", "python3"],
+  ["django", "django rest framework", "drf"],
+  ["flask", "fastapi"],
+  // Java & Frameworks
+  ["java", "core java", "java 8", "java 11", "java 17"],
+  ["spring boot", "spring", "spring mvc"],
+  // C & C++
+  ["c++", "cpp", "modern c++"],
+  ["c", "embedded c"],
+  // Version Control & CI/CD
+  ["git", "github", "gitlab", "version control"],
+  ["ci/cd", "cicd", "github actions", "jenkins", "gitlab ci"],
+  // Containers & Cloud
+  ["docker", "containers", "containerization"],
+  ["kubernetes", "k8s"],
+  ["aws", "amazon web services"],
+  ["azure", "microsoft azure"],
+  ["gcp", "google cloud", "google cloud platform"],
+  // Linux & Scripting
+  ["linux", "bash", "shell", "unix"],
+  // Testing
+  ["jest", "playwright", "cypress", "selenium", "pytest", "unit testing", "testing"],
+  // Mechanical CAD
+  ["autocad", "cad", "computer aided design", "drafting"],
+  ["solidworks", "solid works"],
+  ["catia", "creo", "ptc creo", "inventor", "fusion 360", "3d cad"],
+  ["ansys", "fea", "finite element analysis", "abaqus", "simulation"],
+  ["cfd", "fluid mechanics", "computational fluid dynamics"],
+  ["thermodynamics", "heat transfer", "thermal analysis"],
+  ["gd&t", "gdt", "geometric dimensioning"],
+  ["cnc", "machining", "manufacturing", "cam"],
+  ["mechatronics", "robotics"],
+  // Electrical & EEE
+  ["matlab", "simulink"],
+  ["embedded c", "microcontrollers", "arduino", "raspberry pi", "stm32", "arm"],
+  ["plc", "scada", "industrial automation", "automation"],
+  ["circuit design", "pcb design", "altium", "kicad", "proteus", "eda"],
+  ["power systems", "electrical machines", "switchgear"],
+  ["vlsi", "verilog", "vhdl", "fpga"],
+  // Civil
+  ["staad pro", "staad", "etabs", "structural analysis"],
+  ["revit", "bim", "building information modeling"],
+  ["surveying", "total station", "gis", "autocad civil 3d"],
+  ["concrete technology", "geotechnical", "soil mechanics"],
+  // Data Science & AI
+  ["pandas", "numpy", "data analysis", "data analytics"],
+  ["scikit-learn", "sklearn", "machine learning", "ml"],
+  ["tensorflow", "pytorch", "keras", "deep learning", "dl"],
+  ["nlp", "natural language processing", "llm", "large language model", "genai", "generative ai"],
+  ["power bi", "tableau", "excel", "data visualization"],
+]
+
+// Skill Satisfaction & Domain Competency Helper
+export function isSkillSatisfied(
+  userSkills: string[],
+  requiredSkill: string,
+): boolean {
+  if (!requiredSkill) return false
+  if (!userSkills || userSkills.length === 0) return false
+
+  const reqClean = requiredSkill.trim().toLowerCase()
+  const reqNormalized = normalizeSkill(requiredSkill).toLowerCase()
+
+  // 1. Direct or normalized match
+  for (const us of userSkills) {
+    if (!us) continue
+    const usClean = us.trim().toLowerCase()
+    const usNormalized = normalizeSkill(us).toLowerCase()
+    if (
+      usClean === reqClean ||
+      usNormalized === reqNormalized ||
+      usClean === reqNormalized ||
+      usNormalized === reqClean
+    ) {
+      return true
+    }
+  }
+
+  // 2. Skill cluster equivalence
+  for (const cluster of SKILL_EQUIVALENCE_CLUSTERS) {
+    const clusterContainsReq = cluster.some(
+      (item) => item.toLowerCase() === reqClean || item.toLowerCase() === reqNormalized,
+    )
+    if (clusterContainsReq) {
+      const userHasAnyInCluster = userSkills.some((us) => {
+        const uClean = us.trim().toLowerCase()
+        const uNorm = normalizeSkill(us).toLowerCase()
+        return cluster.some(
+          (item) => item.toLowerCase() === uClean || item.toLowerCase() === uNorm,
+        )
+      })
+      if (userHasAnyInCluster) return true
+    }
+  }
+
+  // 3. Compound skills (e.g. HTML/CSS)
+  if (reqClean === "html/css") {
+    return userSkills.some((s) => /html/i.test(s) || /css/i.test(s))
+  }
+
+  return false
+}
+
+// City & Tech Hub Synonym Matcher (handles Bangalore vs Bengaluru, Chennai vs Madras, etc.)
+export function matchLocation(jobLoc: string, targetLoc: string): boolean {
+  if (!targetLoc || !targetLoc.trim()) return true
+  const jLower = (jobLoc || "").toLowerCase()
+  const tLower = targetLoc.toLowerCase().trim()
+
+  if (jLower.includes(tLower) || tLower.includes(jLower)) return true
+  if (jLower.includes("remote") || jLower.includes("worldwide")) return true
+
+  // Location aliases & synonyms
+  const locationAliases: Record<string, string[]> = {
+    bangalore: ["bengaluru", "bangalore", "karnataka", "electronic city", "whitefield", "manyata", "koramangala", "bellandur", "indiranagar"],
+    bengaluru: ["bengaluru", "bangalore", "karnataka", "electronic city", "whitefield", "manyata", "koramangala", "bellandur", "indiranagar"],
+    chennai: ["chennai", "madras", "tamil nadu", "omr", "tidel", "guindy", "sholinganallur"],
+    madras: ["chennai", "madras", "tamil nadu"],
+    mumbai: ["mumbai", "bombay", "maharashtra", "navi mumbai", "thane", "bkc", "andheri"],
+    bombay: ["mumbai", "bombay", "maharashtra"],
+    pune: ["pune", "poona", "maharashtra", "hinjewadi", "magarpatta"],
+    hyderabad: ["hyderabad", "secunderabad", "cyberabad", "telangana", "hitec city", "gachibowli", "madhapur"],
+    delhi: ["delhi", "new delhi", "noida", "gurgaon", "gurugram", "ncr", "national capital region", "faridabad"],
+    gurgaon: ["gurgaon", "gurugram", "haryana", "ncr", "delhi"],
+    gurugram: ["gurgaon", "gurugram", "haryana", "ncr", "delhi"],
+    noida: ["noida", "greater noida", "uttar pradesh", "up", "ncr", "delhi"],
+    kolkata: ["kolkata", "calcutta", "west bengal", "salt lake", "new town"],
+    coimbatore: ["coimbatore", "kovai", "tamil nadu"],
+    trivandrum: ["trivandrum", "thiruvananthapuram", "technopark", "kerala"],
+    kochi: ["kochi", "cochin", "infopark", "kerala"],
+  }
+
+  for (const [key, synonyms] of Object.entries(locationAliases)) {
+    if (tLower.includes(key) || synonyms.some((s) => tLower.includes(s))) {
+      if (synonyms.some((s) => jLower.includes(s))) return true
+    }
+  }
+
+  return false
+}
+
+// Safe Application URL generator (prevents broken redirects, empty tabs, and 404 errors)
+export function getSafeApplyUrl(job: any): string {
+  if (job?.applyLink && typeof job.applyLink === "string") {
+    const raw = job.applyLink.trim()
+    if (
+      (raw.startsWith("https://") || raw.startsWith("http://")) &&
+      !raw.includes("about:blank") &&
+      !raw.includes("localhost") &&
+      !raw.includes("example.com") &&
+      raw !== "https://jooble.org" &&
+      raw !== "https://jooble.org/" &&
+      raw !== "https://adzuna.com" &&
+      raw !== "https://adzuna.com/" &&
+      raw !== "https://jobdataapi.com" &&
+      raw !== "https://jobdataapi.com/" &&
+      !raw.includes("error") &&
+      !raw.endsWith("#")
+    ) {
+      return raw
+    }
+  }
+
+  const company = (job?.company || "Company").replace(/[^\w\s]/g, " ").trim()
+  const title = (job?.title || "Internship").replace(/[^\w\s]/g, " ").trim()
+  return `https://www.google.com/search?q=${encodeURIComponent(`${company} ${title} internship apply careers`)}`
 }
 
 // Extract Skills and Partition Required vs Preferred from Job Listing
@@ -1169,7 +1476,10 @@ export function matchAndRankJobs(
     const matchedPreferred: string[] = []
 
     for (const req of requiredSkills) {
-      if (normalizedCandidateSkills.includes(req)) {
+      if (
+        normalizedCandidateSkills.includes(req) ||
+        isSkillSatisfied(normalizedCandidateSkills, req)
+      ) {
         matchedRequired.push(req)
       } else {
         missingRequired.push(req)
@@ -1177,7 +1487,10 @@ export function matchAndRankJobs(
     }
 
     for (const pref of preferredSkills) {
-      if (normalizedCandidateSkills.includes(pref)) {
+      if (
+        normalizedCandidateSkills.includes(pref) ||
+        isSkillSatisfied(normalizedCandidateSkills, pref)
+      ) {
         matchedPreferred.push(pref)
       }
     }
@@ -1245,8 +1558,7 @@ export function matchAndRankJobs(
       }
     }
     if (candidate.preferred_location) {
-      const loc = candidate.preferred_location.toLowerCase()
-      if (job.location.toLowerCase().includes(loc)) {
+      if (matchLocation(job.location, candidate.preferred_location)) {
         preferenceScore += 2
       }
     }

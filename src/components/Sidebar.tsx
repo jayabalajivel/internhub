@@ -29,7 +29,7 @@ const navItems = [
   { id: "internships", label: "Find Jobs & Internships", Icon: BriefcaseIcon },
   { id: "resume", label: "Resume Builder", Icon: FileTextIcon },
   { id: "skills", label: "Skill Gap Analysis", Icon: ZapIcon },
-  { id: "tracker", label: "Applications", Icon: KanbanIcon },
+  { id: "tracker", label: "Application Tracker", Icon: KanbanIcon },
   { id: "saved", label: "Saved Jobs", Icon: BookmarkIcon },
   { id: "notifications", label: "Alerts", Icon: BellIcon },
 ] as const
@@ -137,7 +137,7 @@ export default function Sidebar({ page, onNavigate }: SidebarProps) {
         <button
           onClick={() => {
             localStorage.removeItem("internhub_token")
-            onNavigate("landing")
+            onNavigate("auth")
           }}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-rose-600 hover:bg-rose-50 font-medium transition-colors"
         >

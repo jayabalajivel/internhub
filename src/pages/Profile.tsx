@@ -98,6 +98,9 @@ export default function Profile() {
 
   useEffect(() => {
     fetchProfile()
+    const handleUpdate = () => fetchProfile()
+    window.addEventListener("internhub_profile_updated", handleUpdate)
+    return () => window.removeEventListener("internhub_profile_updated", handleUpdate)
   }, [])
 
   const saveAllData = async (overrides?: any) => {
@@ -271,7 +274,7 @@ export default function Profile() {
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Arun Kumar"
+                  placeholder="e.g. Alex Morgan"
                   className="w-full bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
                 />
               </div>
@@ -293,7 +296,7 @@ export default function Profile() {
                 <input
                   value={university}
                   onChange={(e) => setUniversity(e.target.value)}
-                  placeholder="e.g. VIT University"
+                  placeholder="e.g. Institute of Technology"
                   className="w-full bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
                 />
               </div>
@@ -326,7 +329,7 @@ export default function Profile() {
                 <input
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  placeholder="e.g. Vellore, Tamil Nadu"
+                  placeholder="e.g. Bengaluru, Karnataka"
                   className="w-full bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
                 />
               </div>
@@ -337,7 +340,7 @@ export default function Profile() {
                 <input
                   value={github}
                   onChange={(e) => setGithub(e.target.value)}
-                  placeholder="e.g. github.com/arunkumar"
+                  placeholder="e.g. github.com/username"
                   className="w-full bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
                 />
               </div>
@@ -348,7 +351,7 @@ export default function Profile() {
                 <input
                   value={linkedin}
                   onChange={(e) => setLinkedin(e.target.value)}
-                  placeholder="e.g. linkedin.com/in/arun"
+                  placeholder="e.g. linkedin.com/in/username"
                   className="w-full bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
                 />
               </div>
@@ -705,7 +708,7 @@ export default function Profile() {
                   <input
                     value={projectForm.link}
                     onChange={(e) => setProjectForm({ ...projectForm, link: e.target.value })}
-                    placeholder="Project URL (e.g. github.com/arun/project)"
+                    placeholder="Project URL (e.g. github.com/username/project)"
                     className="w-full bg-white border border-slate-200 px-4 py-2.5 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
                   />
                   <button

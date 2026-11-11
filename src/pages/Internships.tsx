@@ -14,7 +14,11 @@ import {
   AlertIcon,
 } from "../components/Icons"
 import { api } from "../api"
-import { syncAndPurgeRemovedJobs } from "../jobServices"
+import {
+  syncAndPurgeRemovedJobs,
+  getSafeApplyUrl,
+  matchLocation,
+} from "../jobServices"
 
 interface Props {
   onNavigate: (p: string) => void
@@ -122,7 +126,7 @@ export default function Internships({ onNavigate }: Props) {
           pRole = pRole || prof.profile?.domain || ""
         }
         const { matchAndRankJobs } = await import("../jobServices")
-        fetched = matchAndRankJobs(
+        const ranked = matchAndRankJobs(
           {
             extracted_skills: skills || [],
             strong_skills: cProf.strong_skills || skills || [],
@@ -131,9 +135,19 @@ export default function Internships({ onNavigate }: Props) {
             primary_role: pRole || "",
             predicted_roles: cProf.predicted_roles || [],
             preferred_work_mode: workMode,
-            preferred_location: stateCity,
+            preferred_location: stateCity || search,
           },
           rawList,
+        )
+
+        // Filter by search query (matching title, company, description, or location synonyms)
+        const q = search.toLowerCase().trim()
+        fetched = ranked.filter(
+          (job: any) =>
+            job.title.toLowerCase().includes(q) ||
+            job.company.toLowerCase().includes(q) ||
+            job.description.toLowerCase().includes(q) ||
+            matchLocation(job.location, q),
         )
       }
       setJobs(fetched || [])
@@ -177,6 +191,10 @@ export default function Internships({ onNavigate }: Props) {
 
   useEffect(() => {
     loadData()
+    const handleProfileUpdate = () => loadData()
+    window.addEventListener("internhub_profile_updated", handleProfileUpdate)
+    return () =>
+      window.removeEventListener("internhub_profile_updated", handleProfileUpdate)
   }, [search, country, stateCity, workMode])
 
   const toggleSave = async (id: string, jobObj?: any) => {
@@ -598,7 +616,7 @@ export default function Internships({ onNavigate }: Props) {
                         </button>
                         
                         <a
-                          href={job.applyLink}
+                          href={getSafeApplyUrl(job)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm"
